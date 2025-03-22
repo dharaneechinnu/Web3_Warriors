@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    
     trim: true,
   },
   email: {
     type: String,
-    required: true,
+ 
     unique: true,
     lowercase: true,
     trim: true,
@@ -18,16 +18,16 @@ const userSchema = new mongoose.Schema({
   },
   dob: {
     type: Date,
-    required: true,
+   
   },
   gender: {
     type: String,
-    required: true,
+   
     enum: ['male', 'female', 'Other'],
   },
   password: {
     type: String,
-    required: true,
+  
     minlength: 6,
   },
   mobileNo: {
@@ -60,7 +60,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-
+  coursesEnrolled: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
   tokenBalance: {
     type: Number,
     default: 0,
@@ -90,6 +90,8 @@ const userSchema = new mongoose.Schema({
   }],
   averageRating: { type: Number, default: 0 },
 });
+
+
 
 const userModel = mongoose.model('UsersLogins', userSchema);
 
