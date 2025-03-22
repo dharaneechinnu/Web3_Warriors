@@ -150,7 +150,7 @@ const Verifyotp = async (req, res) => {
             return res.status(400).json({ message: "Email and OTP are required" });
         }
 
-        // Retrieve the user by email
+        // Retrieve user by email
         const user = await usermodel.findOne({ email });
 
         if (!user) {
