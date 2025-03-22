@@ -33,6 +33,7 @@ router.post('/updateProgress', courseController.updateProgress);
 router.get('/getProgress/:learnerId/:courseId', courseController.getProgress);
 
 
+
 // Mark course as completed
 router.post("/complete", courseController.completeCourse);
 
