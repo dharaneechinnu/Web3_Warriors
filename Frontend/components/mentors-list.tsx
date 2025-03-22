@@ -8,8 +8,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 const mentors = [
   {
@@ -99,22 +106,18 @@ export function MentorsList() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 100])
 
   const filteredMentors = mentors.filter((mentor) => {
-    // Search by name or title
     const matchesSearch =
       mentor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       mentor.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       mentor.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
 
-    // Filter by selected skills
     const matchesSkills = selectedSkills.length === 0 || selectedSkills.some((skill) => mentor.skills.includes(skill))
 
-    // Filter by price range
     const matchesPrice = mentor.hourlyRate >= priceRange[0] && mentor.hourlyRate <= priceRange[1]
 
     return matchesSearch && matchesSkills && matchesPrice
   })
 
-  // Sort mentors
   const sortedMentors = [...filteredMentors].sort((a, b) => {
     if (sortBy === "rating") return b.rating - a.rating
     if (sortBy === "students") return b.students - a.students
@@ -123,7 +126,6 @@ export function MentorsList() {
     return 0
   })
 
-  // Get all unique skills
   const allSkills = Array.from(new Set(mentors.flatMap((mentor) => mentor.skills))).sort()
 
   return (
@@ -134,18 +136,18 @@ export function MentorsList() {
           <p className="text-muted-foreground">Find the perfect mentor for your learning journey</p>
         </div>
         <div className="flex items-center gap-2">
-          <Sheet>
-            <SheetTrigger asChild>
+          <Dialog>
+            <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 gap-1">
                 <Filter className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Filters</span>
               </Button>
-            </SheetTrigger>
-            <SheetContent>
-              <SheetHeader>
-                <SheetTitle>Filter Mentors</SheetTitle>
-                <SheetDescription>Narrow down mentors based on your preferences</SheetDescription>
-              </SheetHeader>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Filter Mentors</DialogTitle>
+                <DialogDescription>Narrow down mentors based on your preferences</DialogDescription>
+              </DialogHeader>
               <div className="py-6 space-y-6">
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Skills</h3>
@@ -192,43 +194,21 @@ export function MentorsList() {
                     />
                   </div>
                 </div>
-                <Separator />
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium">Availability</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-                      <Button key={day} variant="outline" size="sm" className="h-7 text-xs">
-                        {day}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex justify-between pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedSkills([])
-                      setPriceRange([0, 100])
-                    }}
-                  >
-                    Reset
-                  </Button>
-                  <Button>Apply Filters</Button>
-                </div>
               </div>
-            </SheetContent>
-          </Sheet>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            </DialogContent>
+          </Dialog>
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
+              type="search"
               placeholder="Search mentors..."
               className="pl-8 h-8"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[180px] h-8">
+          <Select defaultValue={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-8 w-[140px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -240,160 +220,106 @@ export function MentorsList() {
           </Select>
         </div>
       </div>
-
-      <Tabs defaultValue="grid">
-        <div className="flex justify-between items-center">
-          <p className="text-sm text-muted-foreground">Showing {sortedMentors.length} mentors</p>
-          <TabsList>
-            <TabsTrigger value="grid">Grid</TabsTrigger>
-            <TabsTrigger value="list">List</TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="grid" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedMentors.map((mentor, index) => (
-              <motion.div
-                key={mentor.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
-                <Card className="overflow-hidden h-full">
-                  <div className="aspect-video relative">
-                    <img
-                      src={mentor.image || "/placeholder.svg"}
-                      alt={mentor.name}
-                      className="object-cover w-full h-full"
-                    />
-                    {mentor.verified && (
-                      <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                        Verified
-                      </div>
-                    )}
-                  </div>
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-bold text-lg">{mentor.name}</h3>
-                        <p className="text-muted-foreground">{mentor.title}</p>
-                      </div>
-                      <div className="flex items-center bg-primary/10 text-primary px-2 py-1 rounded-full text-sm">
-                        <Star className="h-3 w-3 fill-primary mr-1" />
-                        {mentor.rating}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{mentor.bio}</p>
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {mentor.skills.slice(0, 3).map((skill, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                      {mentor.skills.length > 3 && (
-                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold">
-                          +{mentor.skills.length - 3} more
-                        </span>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {sortedMentors.map((mentor) => (
+          <motion.div
+            key={mentor.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-16 w-16">
+                      <img
+                        alt={mentor.name}
+                        className="rounded-full object-cover"
+                        height="64"
+                        src={mentor.image}
+                        style={{
+                          aspectRatio: "64/64",
+                          objectFit: "cover",
+                        }}
+                        width="64"
+                      />
+                      {mentor.verified && (
+                        <div className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center text-xs">
+                          ✓
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center justify-between text-sm mb-4">
-                      <div className="flex items-center">
-                        <Users className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                        <span>{mentor.students} students</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Calendar className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                        <span>{mentor.availability}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold">{mentor.hourlyRate} tokens/hr</div>
-                      <Button>View Profile</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="list" className="mt-6">
-          <div className="space-y-4">
-            {sortedMentors.map((mentor, index) => (
-              <motion.div
-                key={mentor.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row gap-6">
-                      <div className="w-full md:w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
-                        <img
-                          src={mentor.image || "/placeholder.svg"}
-                          alt={mentor.name}
-                          className="object-cover w-full h-full"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-bold text-lg">{mentor.name}</h3>
-                              {mentor.verified && (
-                                <div className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                                  Verified
-                                </div>
-                              )}
-                            </div>
-                            <p className="text-muted-foreground">{mentor.title}</p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center">
-                              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                              <span className="font-medium">{mentor.rating}</span>
-                            </div>
-                            <div className="font-bold">{mentor.hourlyRate} tokens/hr</div>
-                          </div>
+                    <div>
+                      <h3 className="font-semibold">{mentor.name}</h3>
+                      <p className="text-sm text-muted-foreground">{mentor.title}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                          <span className="text-sm font-medium">{mentor.rating}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-4">{mentor.bio}</p>
-                        <div className="flex flex-wrap gap-1 mb-4">
-                          {mentor.skills.map((skill, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4 text-sm">
-                            <div className="flex items-center">
-                              <Users className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                              <span>{mentor.students} students</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Calendar className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                              <span>Available: {mentor.availability}</span>
-                            </div>
-                          </div>
-                          <Button>View Profile</Button>
+                        <div className="flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">{mentor.students} students</span>
                         </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold">${mentor.hourlyRate}</div>
+                    <div className="text-sm text-muted-foreground">per hour</div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-muted-foreground line-clamp-3">{mentor.bio}</p>
+                </div>
+                <div className="mt-4">
+                  <div className="flex flex-wrap gap-2">
+                    {mentor.skills.map((skill) => (
+                      <div
+                        key={skill}
+                        className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground"
+                      >
+                        {skill}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">{mentor.availability}</span>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="ml-auto">
+                        Book Session
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Book a Session with {mentor.name}</DialogTitle>
+                        <DialogDescription>Schedule a mentoring session at your preferred time.</DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4">
+                        <p className="text-sm text-muted-foreground">
+                          Available on: <span className="font-medium text-foreground">{mentor.availability}</span>
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Rate: <span className="font-medium text-foreground">${mentor.hourlyRate} per hour</span>
+                        </p>
+                      </div>
+                      <DialogFooter>
+                        <Button>Continue to Booking</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
     </div>
   )
 }
-

@@ -35,14 +35,12 @@ export function WalletDashboard() {
   const [sendAmount, setSendAmount] = useState("")
   const [recipientAddress, setRecipientAddress] = useState("")
   const [isSending, setIsSending] = useState(false)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const handleSendTokens = () => {
     setIsSending(true)
     // Simulate API call
     setTimeout(() => {
       setIsSending(false)
-      setIsDialogOpen(false)
       setSendAmount("")
       setRecipientAddress("")
     }, 2000)
@@ -74,7 +72,7 @@ export function WalletDashboard() {
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="w-full">
                     <Send className="mr-2 h-4 w-4" />
@@ -339,4 +337,3 @@ export function WalletDashboard() {
     </div>
   )
 }
-

@@ -1,5 +1,11 @@
+"use client"
+
+import dynamic from "next/dynamic"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { MentorsList } from "@/components/mentors-list"
+
+const MentorsList = dynamic(() => import("@/components/mentors-list").then(mod => mod.MentorsList), {
+  ssr: false
+})
 
 export default function MentorsPage() {
   return (
@@ -8,4 +14,3 @@ export default function MentorsPage() {
     </DashboardLayout>
   )
 }
-
