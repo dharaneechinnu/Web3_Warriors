@@ -14,15 +14,34 @@ import { WalletConnect } from "@/components/wallet-connect"
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      const response = await fetch("http://localhost:3500/Auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+      if (response.ok) {
+        window.location.href = "/dashboard"
+      } else {
+        alert(data.message || "Login failed")
+      }
+    } catch (error) {
+      console.error("Login error:", error)
+      alert("An error occurred. Please try again.")
+    } finally {
       setIsLoading(false)
-      window.location.href = "/dashboard"
-    }, 1500)
+    }
   }
 
   return (
@@ -32,23 +51,10 @@ export function LoginForm() {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      <div className="space-y-4">
-        <WalletConnect />
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <Separator />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-          </div>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="name@example.com" required />
+          <Input id="email" type="email" placeholder="name@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -57,7 +63,7 @@ export function LoginForm() {
               Forgot password?
             </Link>
           </div>
-          <Input id="password" type="password" required />
+          <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? (
@@ -83,4 +89,3 @@ export function LoginForm() {
     </motion.div>
   )
 }
-

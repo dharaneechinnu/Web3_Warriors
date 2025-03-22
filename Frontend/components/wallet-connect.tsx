@@ -1,26 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import Web3 from "web3"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
 
 export function WalletConnect() {
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
+  const [isConnected, setIsConnected] = useState(false)
+  const [web3, setWeb3] = useState(null)
 
-  const handleConnect = () => {
-    setIsConnecting(true)
-    // Simulate wallet connection
-    setTimeout(() => {
-      const randomAddress = `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join(
-        "",
-      )}`
-      setWalletAddress(randomAddress)
+  useEffect(() => {
+    if (window.ethereum) {
+      setWeb3(new Web3(window.ethereum))
+    } else {
+      console.warn("No Ethereum provider found. Install MetaMask!")
+    }
+  }, [])
+
+  const sendToBackend = async (address) => {
+    try {
+      const response = await fetch("http://localhost:3500/User/wallet/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: address })
+      })
+      const data = await response.json()
+      console.log("Backend response:", data)
+    } catch (error) {
+      console.error("Failed to send wallet address to backend:", error)
+    }
+  }
+
+  const handleConnect = async () => {
+    if (!web3) {
+      alert("Please install MetaMask or another Web3 provider!")
+      return
+    }
+
+    try {
+      setIsConnecting(true)
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
+      setWalletAddress(accounts[0])
       setIsConnected(true)
+      sendToBackend(accounts[0]) // Send to backend after connecting
+    } catch (error) {
+      console.error("Wallet connection failed:", error)
+    } finally {
       setIsConnecting(false)
-    }, 1500)
+    }
+  }
+
+  const handleDisconnect = () => {
+    setWalletAddress("")
+    setIsConnected(false)
   }
 
   return (
@@ -69,7 +104,7 @@ export function WalletConnect() {
                 </div>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setIsConnected(false)}>
+            <Button variant="ghost" size="sm" onClick={handleDisconnect}>
               Disconnect
             </Button>
           </div>
@@ -78,4 +113,3 @@ export function WalletConnect() {
     </div>
   )
 }
-
