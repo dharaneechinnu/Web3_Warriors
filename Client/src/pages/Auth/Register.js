@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
-
+import Web3 from 'web3'; // Import Web3
+import {address} from '../../services/contractAddress'
+import { contractabi } from '../../services/abi';
 function Register() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -11,8 +13,7 @@ function Register() {
     password: '',
     dob: '',
     gender: '',
-    mobileNo: '',
-    role: 'user'
+    mobileNo: ''
   });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -22,10 +23,15 @@ function Register() {
     try {
       setError(null);
       setLoading(true);
-      
-      const response = await axios.post('http://localhost:5000/Auth/register', formData);
-      
-      if (response.data.success) {
+
+      // Register user on backend
+      const response = await axios.post('http://localhost:3500/Auth/register', formData);
+
+      if (response.status === 200) {
+        // Call blockchain function after successful registration
+        await registerUserOnBlockchain(formData);
+
+        // Navigate to login page with success message
         navigate('/login', { state: { message: 'Registration successful! Please login.' } });
       }
     } catch (err) {
@@ -33,6 +39,41 @@ function Register() {
       setError(err.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const registerUserOnBlockchain = async (userData) => {
+    try {
+      // Connect to Ethereum using MetaMask
+      if (window.ethereum) {
+        const web3 = new Web3(window.ethereum);
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+       
+        const contractAddress = address; // Replace with your contract address
+
+        const contract = new web3.eth.Contract(contractabi, contractAddress);
+
+        const accounts = await web3.eth.getAccounts();
+        const userAccount = accounts[0];
+
+        // Call the registerUser function of your contract
+        const tx = await contract.methods.registerUser(
+          userData.name,
+          userData.email,
+          userData.password,
+          userData.dob,
+          userData.gender,
+          userData.mobileNo
+        ).send({ from: userAccount });
+
+        console.log('Transaction hash:', tx.transactionHash);
+      } else {
+        alert('Please install MetaMask to continue.');
+      }
+    } catch (error) {
+      console.error('Error registering user on blockchain:', error);
+      alert('Blockchain registration failed.');
     }
   };
 
@@ -144,28 +185,10 @@ function Register() {
             />
           </div>
 
-          <div>
-            <label className="block text-gray-400 mb-2">Role</label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleInputChange}
-              required
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="user">User</option>
-              <option value="mentor">Mentor</option>
-            </select>
-          </div>
-
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-2 px-4 rounded-lg ${
-              loading
-                ? 'bg-blue-500/50 cursor-not-allowed'
-                : 'bg-blue-500 hover:bg-blue-600'
-            } transition-colors text-white font-medium`}
+            className={`w-full py-2 px-4 rounded-lg ${loading ? 'bg-blue-500/50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'} transition-colors text-white font-medium`}
           >
             {loading ? 'Registering...' : 'Register'}
           </button>
@@ -174,10 +197,7 @@ function Register() {
         <div className="mt-6 text-center">
           <p className="text-gray-400">
             Already have an account?{' '}
-            <Link
-              to="/login"
-              className="text-blue-500 hover:text-blue-400"
-            >
+            <Link to="/login" className="text-blue-500 hover:text-blue-400">
               Login here
             </Link>
           </p>
