@@ -77,7 +77,7 @@ exports.getCourseById = async (req, res) => {
 exports.enrollInCourse = async (req, res) => {
     try {
         const { learnerId, courseId } = req.body;  // Get learnerId and courseId from the request body
-
+        console.log(learnerId, courseId)
         // Check if the course exists
         const course = await Course.findById(courseId);
         if (!course) {
@@ -135,7 +135,9 @@ exports.getMentorCourses = async (req, res) => {
 };
 
 // Update learner's progress in a specific course
-exports.updateProgress = async (req, res) => {
+
+
+    exports.updateProgress = async (req, res) => {
     try {
         const { learnerId, courseId, progress } = req.body;  // Get learnerId, courseId, and progress from request body
 
@@ -261,3 +263,20 @@ exports.getCompletedCourses = async (req, res) => {
     }
 };
 
+// In courseController.js
+
+exports.getEnrolledCourses = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Find all courses that have the userId in the enrolledLearners array
+        const enrolledCourses = await Course.find({ enrolledLearners: userId });
+        if (enrolledCourses.length === 0) {
+            return res.status(404).json({ message: "No courses found for this user" });
+        }
+
+        res.status(200).json({ enrolledCourses });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error });
+    }
+};

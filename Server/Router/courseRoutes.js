@@ -24,6 +24,8 @@ router.get("/:id", courseController.getCourseById);
 //router to enroll user 
 router.post("/enroll", courseController.enrollInCourse);
 
+router.get("/enrolled/:userId", courseController.getEnrolledCourses);
+
 router.get("/mentor/:mentorId", courseController.getMentorCourses);
 
 // Update progress for learner

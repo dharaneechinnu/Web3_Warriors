@@ -68,13 +68,13 @@ function Dashboard() {
 
   const handleEnrollCourse = async (courseId) => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
-
+      
+      console.log("user Id in enroll : ",userId);
+      console.log("course Id in enroll : ",courseId);
       await api.post('/courses/enroll', {
         learnerId: userId,
         courseId: courseId
-      }, { headers });
+      });
 
       setSelectedCourse(courseId);
     } catch (err) {
@@ -84,10 +84,22 @@ function Dashboard() {
 
   const handleCourseComplete = async (courseId) => {
     try {
+      const response = await api.post("/courses/complete",{
+        learnerId: userId,
+        courseId: courseId
+      })
+      console.log("learnerId complete userId : ",userId);
+      console.log("courseId complete courseId : ",courseId);
+     if(response.status===200){
+      alert("Course complete successFully...");
+     }
+     else if(response.status===400){
+      alert(response.message)
+     }
       setSelectedCourse(null);
       fetchInitialData();
-    } catch (err) {
-      setError('Failed to mark course as complete. Please try again.');
+    } catch (error) {
+      setError('Failed to mark course as complete. Please try again.',error);
     }
   };
 
