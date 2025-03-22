@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -6,7 +6,12 @@ function Navbar() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
+  const [coin,setcoins]= useState('');
 
+  useEffect(()=>{
+    const coinss = localStorage.getItem('tokencoin');
+    setcoins(coinss);
+  })
   const handleLogout = async () => {
     try {
       await api.post('/auth/logout', {}, {
@@ -36,6 +41,12 @@ function Navbar() {
           <div className="flex items-center space-x-4">
             {token ? (
               <>
+               <Link
+                  to="/wallet"
+                  className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  TokenCoins  : {coin}
+                </Link>
                 <Link
                   to="/dashboard"
                   className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
