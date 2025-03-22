@@ -141,6 +141,7 @@ const gtpOtps = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+//Arun
 const Verifyotp = async (req, res) => {
     try {
         const { email, otp } = req.body;
