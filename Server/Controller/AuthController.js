@@ -38,17 +38,18 @@ console.log(email,password)
     }
 };
 
+
 const register = async (req, res) => {
     try {
-        const { name, password, email, dob, gender,mobileNo} = req.body;
+        const { name, password, email, dob, gender, mobileNo } = req.body;
 
         // Validate input data
         if (!name || !password || !email || !dob || !gender || !mobileNo) {
             return res.status(400).json({ message: 'All fields are required' });
         }
 
-        // Check if user already exists by email or registration number
-        const existingUser = await usermodel.findOne({ $or: [{ email }] });
+        // Check if user already exists by email
+        const existingUser = await usermodel.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: 'User with this email already exists' });
         }
@@ -56,7 +57,7 @@ const register = async (req, res) => {
         // Hash the password
         const hashpwd = await bcrypt.hash(password, 10);
 
-        // Create the new user
+        // Create the new user with initial balance set to 10
         await usermodel.create({
             name,
             password: hashpwd,
@@ -64,10 +65,11 @@ const register = async (req, res) => {
             mobileNo,
             dob,
             gender,
+            tokenBalance: 10,  // Set initial balance to 10
         });
 
         // Send success response
-        return res.status(200).json({ message: 'User registered successfully' });
+        return res.status(200).json({ message: 'User registered successfully', balance: 10 });
     } catch (error) {
         console.error('Error registering user:', error);
 
@@ -75,6 +77,8 @@ const register = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+
 
   
 

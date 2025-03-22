@@ -76,6 +76,8 @@ const userSchema = new mongoose.Schema({
   }],
   coursesCompleted: { type: Number, default: 0 },
   coursesTaught: { type: Number, default: 0 },
+  linkedin:{type:String,default:null},
+  github:{type:String,default:null},
   rewards: [{
     type: String,
     description: { type: String },
