@@ -1,103 +1,180 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { session, user } from '../services/api';
 
 function LiveSessions() {
-  const sessions = [
-    {
-      title: 'Web Development Fundamentals',
-      mentor: 'John Doe',
-      time: '2:00 PM',
-      date: '2024-03-23',
-      status: 'Live',
-      participants: 24
-    },
-    {
-      title: 'Blockchain Basics',
-      mentor: 'Jane Smith',
-      time: '4:00 PM',
-      date: '2024-03-23',
-      status: 'Upcoming',
-      participants: 18
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filters, setFilters] = useState({
+    search: '',
+    tags: '',
+    startDate: '',
+    endDate: ''
+  });
+
+  useEffect(() => {
+    fetchSessions();
+  }, [filters]);
+
+  const fetchSessions = async () => {
+    try {
+      setLoading(true);
+      const response = await session.getAll(filters);
+      setSessions(response.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const handleEnroll = async (sessionId) => {
+    try {
+      await user.enrollSession(sessionId);
+      fetchSessions();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  if (loading) return <div className="text-center py-8">Loading...</div>;
+  if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
+      {/* Filters */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="bg-gray-800 p-6 rounded-lg mb-8"
       >
-        <h1 className="text-3xl font-bold">Live Sessions</h1>
-        <p className="text-gray-400">Join interactive learning sessions with expert mentors</p>
+        <h2 className="text-2xl font-bold mb-4">Find Sessions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <input
+            type="text"
+            name="search"
+            placeholder="Search sessions..."
+            value={filters.search}
+            onChange={handleFilterChange}
+            className="bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            name="tags"
+            placeholder="Tags (comma separated)"
+            value={filters.tags}
+            onChange={handleFilterChange}
+            className="bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="date"
+            name="startDate"
+            value={filters.startDate}
+            onChange={handleFilterChange}
+            className="bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="date"
+            name="endDate"
+            value={filters.endDate}
+            onChange={handleFilterChange}
+            className="bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
       </motion.div>
 
-      {/* Session Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {sessions.map((session, index) => (
+      {/* Sessions List */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {sessions.map((session) => (
           <motion.div
-            key={index}
+            key={session._id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-gray-800 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+            className="bg-gray-800 rounded-lg overflow-hidden"
           >
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
-                <h2 className="text-xl font-bold">{session.title}</h2>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    session.status === 'Live'
-                      ? 'bg-red-500/20 text-red-500'
-                      : 'bg-blue-500/20 text-blue-500'
-                  }`}
-                >
+                <h3 className="text-xl font-bold">{session.title}</h3>
+                <span className={`px-3 py-1 rounded-full text-sm ${
+                  session.status === 'scheduled' ? 'bg-green-600' :
+                  session.status === 'ongoing' ? 'bg-blue-600' :
+                  'bg-gray-600'
+                }`}>
                   {session.status}
                 </span>
               </div>
-              <div className="space-y-2 text-gray-400">
-                <p>Mentor: {session.mentor}</p>
-                <p>Time: {session.time}</p>
-                <p>Date: {session.date}</p>
-                <p>Participants: {session.participants}</p>
+              <p className="text-gray-400 mb-4">{session.description}</p>
+              <div className="space-y-2 mb-4">
+                <p className="text-sm">
+                  <span className="text-gray-400">Mentor:</span>{' '}
+                  {session.mentor?.username}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Date:</span>{' '}
+                  {new Date(session.startTime).toLocaleDateString()}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Time:</span>{' '}
+                  {new Date(session.startTime).toLocaleTimeString()}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Duration:</span>{' '}
+                  {session.duration} minutes
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Price:</span>{' '}
+                  ${session.price}
+                </p>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors"
-              >
-                {session.status === 'Live' ? 'Join Session' : 'Register'}
-              </motion.button>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {session.tags?.map((tag, index) => (
+                  <span
+                    key={index}
+                    className="bg-gray-700 px-2 py-1 rounded-full text-xs"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-400">
+                  {session.participants?.length || 0}/{session.maxParticipants} spots filled
+                </p>
+                {session.status === 'scheduled' && (
+                  <button
+                    onClick={() => handleEnroll(session._id)}
+                    disabled={session.participants?.length >= session.maxParticipants}
+                    className={`px-4 py-2 rounded-lg ${
+                      session.participants?.length >= session.maxParticipants
+                        ? 'bg-gray-600 cursor-not-allowed'
+                        : 'bg-blue-500 hover:bg-blue-600'
+                    }`}
+                  >
+                    {session.participants?.length >= session.maxParticipants
+                      ? 'Full'
+                      : 'Enroll Now'}
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         ))}
       </div>
-
-      {/* Recorded Sessions */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="mt-12"
-      >
-        <h2 className="text-2xl font-bold mb-6">Recorded Sessions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((_, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.1 }}
-              className="bg-gray-800 rounded-lg p-4"
-            >
-              <div className="aspect-video bg-gray-700 rounded-lg mb-4"></div>
-              <h3 className="font-semibold mb-2">Advanced JavaScript Concepts</h3>
-              <p className="text-gray-400 text-sm">Duration: 1h 30m</p>
-            </motion.div>
-          ))}
+      
+      {sessions.length === 0 && (
+        <div className="text-center py-8 text-gray-400">
+          No sessions found matching your criteria
         </div>
-      </motion.div>
+      )}
     </div>
   );
 }
