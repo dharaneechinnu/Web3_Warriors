@@ -15,7 +15,7 @@ mongoose.connect(process.env.MONGODB)
     })
 
 app.use("/Auth",require("./Router/AuthRouter"))
-
+app.use("/User",require("./Router/userRoutes"))
 
 
 

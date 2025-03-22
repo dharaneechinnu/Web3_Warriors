@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
   },
+  UserWalletAddress: {
+    type: String,
+  },
   dob: {
     type: Date,
     required: true,
@@ -28,11 +31,11 @@ const userSchema = new mongoose.Schema({
     minlength: 6,
   },
   mobileNo: {
-    type: String, // Changed to String for handling leading zeros and large numbers
+    type: String,
     trim: true,
     validate: {
       validator: function (v) {
-        return /^\d{10}$/.test(v); // 10-digit mobile number validation
+        return /^\d{10}$/.test(v);
       },
       message: props => `${props.value} is not a valid mobile number!`,
     },
@@ -58,30 +61,34 @@ const userSchema = new mongoose.Schema({
     default: false,
   },
 
-  // New fields for Token and Reward System
   tokenBalance: {
     type: Number,
-    default: 0, // Users start with 0 tokens
+    default: 0,
   },
   transactionHistory: [{
-    transactionType: { type: String, enum: ['earn', 'spend'], required: true }, // 'earn' for earned tokens, 'spend' for spent tokens
+    transactionType: { type: String, enum: ['earn', 'spend'], required: true },
     amount: { type: Number, required: true },
     timestamp: { type: Date, default: Date.now },
-    description: { type: String }, // Optional field to describe the transaction
+    description: { type: String },
   }],
-  
-  // Optional: For advanced user profiling
   skills: [{
-    type: String, // List of skills the user has
+    type: String,
   }],
-  
-  // Optional: To track the rewards earned by the user
+  coursesCompleted: { type: Number, default: 0 },
+  coursesTaught: { type: Number, default: 0 },
   rewards: [{
-    type: String, // This could be reward names like "Certification", "Course Completion", etc.
+    type: String,
     description: { type: String },
     dateEarned: { type: Date, default: Date.now },
   }],
-  
+
+  ratings: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'UsersLogins' },
+    rating: { type: Number, min: 1, max: 5, required: true }, 
+    review: { type: String, trim: true }, 
+    date: { type: Date, default: Date.now },
+  }],
+  averageRating: { type: Number, default: 0 },
 });
 
 const userModel = mongoose.model('UsersLogins', userSchema);
