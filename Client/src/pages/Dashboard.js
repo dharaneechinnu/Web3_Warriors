@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import api from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [userRole] = useState(localStorage.getItem('userRole') || 'user');
   const [activeTab, setActiveTab] = useState('learner');
   const [courses, setCourses] = useState([]);
@@ -11,6 +13,8 @@ function Dashboard() {
   const [error, setError] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [mentors, setMentors] = useState([]); // Initialize as empty array
   const [editForm, setEditForm] = useState({
     name: '',
     email: '',
@@ -56,6 +60,15 @@ function Dashboard() {
         case 'mentor':
           const mentorCoursesRes = await api.get(`/courses/mentor/${userId}`, { headers });
           setCourses(mentorCoursesRes.data.courses);
+          break;
+        case 'enrolled':
+          const enrolledRes = await api.get(`/courses/enrolled/${userId}`, { headers });
+          console.log("Enrolled",enrolledRes.data)
+          setEnrolledCourses(Array.isArray(enrolledRes.data) ? enrolledRes.data : []);
+          break;
+        case 'mentorship':
+          const mentorsRes = await api.get('/mentorship/getallmentor');
+          setMentors(Array.isArray(mentorsRes.data.mentorship) ? mentorsRes.data.mentorship : []); // Ensure array
           break;
       }
     } catch (err) {
@@ -182,6 +195,12 @@ function Dashboard() {
           Mentorship
         </button>
         <button 
+          onClick={() => setActiveTab('enrolled')}
+          className={`px-4 py-2 rounded ${activeTab === 'enrolled' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+        >
+          Enrolled Courses
+        </button>
+        <button 
           onClick={() => setActiveTab('profile')}
           className={`px-4 py-2 rounded ${activeTab === 'profile' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
         >
@@ -250,7 +269,41 @@ function Dashboard() {
           </div>
         )}
 
-
+        {activeTab === 'enrolled' && (
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-4">My Enrolled Courses</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {enrolledCourses.map((course) => {
+                const thumbnailPath = course.thumbnail ? `http://localhost:3500/uploads/images/${course.thumbnail.split('\\').pop()}` : '/fallback-image.jpg';
+                const videoPath = course.video ? `http://localhost:3500/uploads/videos/${course.video.split('\\').pop()}` : '';
+                console.log(course._id)
+                return (
+                  <div key={course._id} className="bg-gray-700 rounded-lg overflow-hidden shadow-xl">
+                    <img 
+                      src={thumbnailPath}
+                      onError={(e) => e.target.src = '/fallback-image.jpg'}
+                      alt={course.title}
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="p-4">
+                      <h3 className="text-xl font-semibold text-white mb-2">{course.title}</h3>
+                      <p className="text-gray-300 text-sm mb-4">{course.description}</p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Progress: {course.progress || 0}%</span>
+                        <button 
+                          onClick={() => setSelectedCourse(course._id)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                        >
+                          Continue Learning
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {activeTab === 'mentor' && (
           <div>
@@ -376,8 +429,33 @@ function Dashboard() {
 
         {activeTab === 'mentorship' && (
           <div className="text-white">
-            <h2 className="text-2xl font-bold mb-4">Mentorship Program</h2>
-            <p>Mentorship features coming soon...</p>
+            <h2 className="text-2xl font-bold mb-4">Available Mentors</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mentors.map((mentor) => (
+                <div key={mentor._id} className="bg-gray-700 rounded-lg p-4">
+                  <h3 className="text-xl font-semibold mb-2">{mentor.name}</h3>
+                  <p className="text-gray-300 mb-2">{mentor.email}</p>
+                  {mentor.skills && (
+                    <div className="mb-4">
+                      <p className="font-semibold mb-1">Skills:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {mentor.skills.map((skill, index) => (
+                          <span key={index} className="bg-blue-500 px-2 py-1 rounded text-sm">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => navigate(`/mentor/${mentor.mentorId}`)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-full"
+                  >
+                    View Profile
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </motion.div>
