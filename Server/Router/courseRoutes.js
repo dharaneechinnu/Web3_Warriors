@@ -33,5 +33,12 @@ router.post('/updateProgress', courseController.updateProgress);
 router.get('/getProgress/:learnerId/:courseId', courseController.getProgress);
 
 
+// Mark course as completed
+router.post("/complete", courseController.completeCourse);
+
+// Get all completed courses for a learner
+router.get("/completed/:learnerId", courseController.getCompletedCourses);
+
+
 
 module.exports = router;

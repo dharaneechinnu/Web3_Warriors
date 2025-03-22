@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { auth } from '../../services/api';
+import Api, { auth } from '../../services/api';
 
 function Login() {
   const navigate = useNavigate();
@@ -18,20 +18,18 @@ function Login() {
     try {
       setError(null);
       setLoading(true);
-      
-      const response = await auth.login(formData);
+  
+      const response = await Api.post('/Auth/login', formData); // Ensure correct API endpoint
       console.log('Login response:', response.data); // Debug log
-      
-      if (response.data.accessToken) {
+  
+      if (response.data) {
         // Store auth data
-        localStorage.setItem('token', response.data.accessToken);
-        localStorage.setItem('userRole', response.data.user.role || 'user');
-        localStorage.setItem('userId', response.data.user._id);
-        
-        // Debug log
+        localStorage.setItem('token', response.data);
+      
+  
         console.log('Stored token:', response.data.accessToken);
         console.log('Redirecting to dashboard...');
-        
+  
         // Redirect to dashboard
         navigate('/dashboard', { replace: true });
       } else {
@@ -44,7 +42,7 @@ function Login() {
       setLoading(false);
     }
   };
-
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({

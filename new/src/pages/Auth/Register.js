@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { auth } from '../../services/api';
+import Api, { auth } from '../../services/api';
 
 function Register() {
   const navigate = useNavigate();
@@ -25,7 +25,7 @@ function Register() {
     try {
       setError(null);
       setLoading(true);
-      const response = await auth.register(formData);
+      const response = await Api.post("/Auth/register",formData);
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('userRole', response.data.user.role);
       navigate('/dashboard');

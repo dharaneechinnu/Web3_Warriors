@@ -11,7 +11,8 @@ const CourseSchema = new mongoose.Schema({
     enrolledLearners: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     progress: [{
         courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
-        progress: { type: Number, default: 0 }  // 0-100% progress
+        progress: { type: Number, default: 0 } ,
+        completed: { type: Boolean, default: false } // Mark if the course is completed
     }],
 });
 

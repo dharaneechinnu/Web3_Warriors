@@ -216,3 +216,48 @@ exports.getProgress = async (req, res) => {
 };
 
 
+exports.completeCourse = async (req, res) => {
+    try {
+        const { learnerId, courseId } = req.body;
+
+        // Find the course
+        const course = await Course.findById(courseId);
+        if (!course) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
+        // Check if learner is enrolled
+        const progressEntry = course.progress.find(p => p.learnerId.toString() === learnerId);
+        if (!progressEntry) {
+            return res.status(400).json({ message: "User is not enrolled in this course" });
+        }
+
+        // Update progress to 100% and mark as completed
+        progressEntry.progress = 100;
+        progressEntry.completed = true;
+
+        await course.save();
+
+        res.status(200).json({ message: "Course marked as completed", course });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error });
+    }
+};
+
+// Get completed courses for a learner
+exports.getCompletedCourses = async (req, res) => {
+    try {
+        const { learnerId } = req.params;
+
+        // Find courses where the learner has completed them
+        const completedCourses = await Course.find({
+            "progress.learnerId": learnerId,
+            "progress.completed": true
+        });
+
+        res.status(200).json({ completedCourses });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error });
+    }
+};
+

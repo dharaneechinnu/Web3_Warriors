@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { session, user } from '../services/api';
+import Api, { session, user } from '../services/api';
 
 function LiveSessions() {
   const [sessions, setSessions] = useState([]);
@@ -20,7 +20,7 @@ function LiveSessions() {
   const fetchSessions = async () => {
     try {
       setLoading(true);
-      const response = await session.getAll(filters);
+      const response = await Api.get("/courses/getall");
       setSessions(response.data);
     } catch (err) {
       setError(err.message);
