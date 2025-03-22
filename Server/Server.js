@@ -20,8 +20,7 @@ app.use("/Auth",require("./Router/AuthRouter"))
 app.use("/User",require("./Router/userRoutes"))
 app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded files
 app.use("/courses", require("./Router/courseRoutes"));
-
-
+app.use("/mentorship",require("./Router/MentorRouter"))
 
 app.listen(PORT,()=>{
     console.log(`Server is running in PORT :${PORT}`);
