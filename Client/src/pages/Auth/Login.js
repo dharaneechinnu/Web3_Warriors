@@ -19,11 +19,12 @@ function Login() {
       setLoading(true);
       
       const response = await axios.post('http://localhost:3500/Auth/login', formData);
-      
-      if (response.data.accessToken) {
+      console.log(response.data)
+      if (response.data) {
         localStorage.setItem('token', response.data.accessToken);
         localStorage.setItem('userRole', response.data.user.role || 'user');
         localStorage.setItem('userId', response.data.user._id);
+        localStorage.setItem('tokencoin', response.data.user.tokenBalance);
         navigate('/dashboard');
       }
     } catch (err) {

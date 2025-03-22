@@ -17,9 +17,13 @@ function Dashboard() {
   const [mentors, setMentors] = useState([]); // Initialize as empty array
   const [editForm, setEditForm] = useState({
     name: '',
-    email: '',
-    skills: []
+    mobileNo: '',
+    UserWalletAddress: '',
+    skills: [],  // Ensure it remains an array
+    gender: '',
+    dob: '' // Ensure date format is correct when sending to the backend
   });
+  
   const [courseForm, setCourseForm] = useState({
     title: '',
     description: '',
@@ -152,18 +156,33 @@ function Dashboard() {
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
+    
     try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
+    
+  
+      if (!userId) {
+        setError('User ID is missing.');
+        return;
+      }
+  
+  
+      console.log("User ID in dashboard for profile update:", userId);
       
-      await api.put(`/profile/${userId}`, editForm);
-      
-      setIsEditing(false);
-      fetchInitialData();
-    } catch (err) {
+      const response = await api.put(`/profile/${userId}`, editForm);
+  
+      if (response.status === 200) {
+        setIsEditing(false);
+        fetchInitialData();
+      } 
+      else if(response){
+        console.log(response);
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
       setError('Failed to update profile. Please try again.');
     }
   };
+  
 
   if (loading) {
     return (
@@ -360,72 +379,108 @@ function Dashboard() {
           </div>
         )}
 
-        {activeTab === 'profile' && userProfile && (
-          <div className="text-white">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Profile Information</h2>
-              <button 
-                onClick={() => setIsEditing(!isEditing)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-              >
-                {isEditing ? 'Cancel' : 'Edit Profile'}
-              </button>
-            </div>
-            
-            {isEditing ? (
-              <form onSubmit={handleProfileUpdate} className="space-y-4">
-                <div>
-                  <label className="block mb-1">Name</label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1">Skills (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={editForm.skills.join(', ')}
-                    onChange={(e) => setEditForm({...editForm, skills: e.target.value.split(',').map(skill => skill.trim())})}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                  />
-                </div>
-                <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
-                  Save Changes
-                </button>
-              </form>
-            ) : (
-              <div className="space-y-2">
-                <p><span className="font-semibold">Name:</span> {userProfile.name}</p>
-                <p><span className="font-semibold">Email:</span> {userProfile.email}</p>
-                <p><span className="font-semibold">Tokens:</span> {userProfile.tokens}</p>
-                <div>
-                  <span className="font-semibold">Skills:</span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {userProfile.skills?.map((skill, index) => (
-                      <span key={index} className="bg-blue-500 px-2 py-1 rounded text-sm">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <p><span className="font-semibold">Courses Completed:</span> {userProfile.coursesCompleted?.length}</p>
-                <p><span className="font-semibold">Courses Taught:</span> {userProfile.coursesTaught?.length}</p>
-              </div>
-            )}
+{activeTab === 'profile' && userProfile && (
+  <div className="text-white">
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-2xl font-bold">Profile Information</h2>
+      <button 
+        onClick={() => setIsEditing(!isEditing)}
+        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        {isEditing ? 'Cancel' : 'Edit Profile'}
+      </button>
+    </div>
+
+    {isEditing ? (
+      <form onSubmit={handleProfileUpdate} className="space-y-4">
+        <div>
+          <label className="block mb-1">Name</label>
+          <input
+            type="text"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Mobile Number</label>
+          <input
+            type="text"
+            value={editForm.mobileNo}
+            onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Wallet Address</label>
+          <input
+            type="text"
+            value={editForm.UserWalletAddress}
+            onChange={(e) => setEditForm({ ...editForm, UserWalletAddress: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Gender</label>
+          <select
+            value={editForm.gender}
+            onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          >
+            <option value="">Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1">Date of Birth</label>
+          <input
+            type="date"
+            value={editForm.dob}
+            onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Skills (comma-separated)</label>
+          <input
+            type="text"
+            value={editForm.skills.join(', ')}
+            onChange={(e) =>
+              setEditForm({ ...editForm, skills: e.target.value.split(',').map(skill => skill.trim()) })
+            }
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+          Save Changes
+        </button>
+      </form>
+    ) : (
+      <div className="space-y-2">
+        <p><span className="font-semibold">Name:</span> {userProfile.name}</p>
+        <p><span className="font-semibold">Mobile No:</span> {userProfile.mobileNo || 'N/A'}</p>
+        <p><span className="font-semibold">Wallet Address:</span> {userProfile.UserWalletAddress || 'N/A'}</p>
+        <p><span className="font-semibold">Gender:</span> {userProfile.gender || 'N/A'}</p>
+        <p><span className="font-semibold">Date of Birth:</span> {userProfile.dob || 'N/A'}</p>
+        <p><span className="font-semibold">Tokens:</span> {userProfile.tokens}</p>
+        <div>
+          <span className="font-semibold">Skills:</span>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {userProfile.skills?.map((skill, index) => (
+              <span key={index} className="bg-blue-500 px-2 py-1 rounded text-sm">
+                {skill}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
+        <p><span className="font-semibold">Courses Completed:</span> {userProfile.coursesCompleted?.length}</p>
+        <p><span className="font-semibold">Courses Taught:</span> {userProfile.coursesTaught?.length}</p>
+      </div>
+    )}
+  </div>
+)}
 
         {activeTab === 'mentorship' && (
           <div className="text-white">
