@@ -274,8 +274,9 @@ exports.getEnrolledCourses = async (req, res) => {
         if (enrolledCourses.length === 0) {
             return res.status(404).json({ message: "No courses found for this user" });
         }
-
+        console.log(enrolledCourses)
         res.status(200).json({ enrolledCourses });
+
     } catch (error) {
         res.status(500).json({ message: "Server Error", error });
     }
