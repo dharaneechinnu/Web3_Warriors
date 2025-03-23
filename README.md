@@ -5,13 +5,13 @@ The **Skill Exchange Platform** is a decentralized application (DApp) that conne
 It allows users to register, participate in courses, offer mentorship, and be rewarded in tokens for their activities. This platform aims to create an interactive ecosystem where users can gain knowledge, receive guidance, and collaborate on projects.
 
 ## Table of Contents
-- [Overview](#overview)
-- [Frontend Setup](#frontend-setup)
-- [Backend Setup](#backend-setup)
-- [Tech Stack](#tech-stack)
-- [Smart Contract](#smart-contract)
-- [License](#license)
-- [Contributing](#contributing)
+- [Overview](##overview)
+- [Frontend Setup](##frontend-setup-react)
+- [Backend Setup](##backend-setup-nodejs)
+- [Tech Stack](##tech-stack)
+- [Smart Contract](##smart-contract)
+- [License](##license)
+- [Contributing](##contributing)
 
 ## Overview
 
