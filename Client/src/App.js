@@ -11,7 +11,7 @@ import Register from './pages/Auth/Register';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import ResetPassword from './pages/Auth/ResetPassword';
 
-// Protected Route Component
+// Protected Route Components
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   const location = useLocation();
