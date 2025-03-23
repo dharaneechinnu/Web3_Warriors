@@ -1,211 +1,311 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import api from '../services/api';
+"use client"
 
-function Wallet() {
-  const [wallet, setWallet] = useState(null);
+import { useState, useEffect } from "react"
+import styled, { keyframes, css } from "styled-components"
+import { motion } from "framer-motion"
+import api from "../services/api"
+import Button from "../components/ui/Button"
+import Card from "../components/ui/Card"
+import Input from "../components/ui/Input"
+import { Heading2, Heading3, Paragraph } from "../components/ui/Typography"
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+`
+
+const WalletContainer = styled.div`
+  padding: 2rem;
+  margin-top: 4rem;
+  
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+`
+
+const WalletGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const WalletCard = styled(Card)`
+  animation: ${css`${fadeIn}`} 0.5s ease-out;
+`
+
+const BalanceContainer = styled.div`
+  margin-bottom: 2rem;
+`
+
+const BalanceLabel = styled.p`
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 0.5rem;
+`
+
+const BalanceAmount = styled.p`
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+  
+  span {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+`
+
+const TransactionsList = styled.div`
+  margin-top: 2rem;
+`
+
+const TransactionItem = styled.div`
+  background: rgba(30, 30, 46, 0.5);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
+`
+
+const TransactionInfo = styled.div``
+
+const TransactionDescription = styled.p`
+  color: white;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+`
+
+const TransactionDate = styled.p`
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.6);
+`
+
+const TransactionAmount = styled.p`
+  font-weight: 700;
+  color: ${(props) => (props.type === "credit" ? "#10b981" : "#ef4444")};
+`
+
+const TransferForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`
+
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`
+
+const ErrorMessage = styled.div`
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+`
+
+const SuccessMessage = styled.div`
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+`
+
+const Wallet = () => {
+  const [wallet, setWallet] = useState(null)
   const [transferData, setTransferData] = useState({
-    recipientId: '',
-    amount: '',
-    description: ''
-  });
-  const [loading, setLoading] = useState(true);
-  const [transferLoading, setTransferLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+    recipientId: "",
+    amount: "",
+    description: "",
+  })
+  const [loading, setLoading] = useState(true)
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
 
   useEffect(() => {
-    fetchWalletData();
-  }, []);
+    fetchWalletData()
+  }, [])
 
   const fetchWalletData = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      const token = localStorage.getItem('token');
-      const response = await api.get('/wallet', {
+      setLoading(true)
+      setError(null)
+
+      const token = localStorage.getItem("token")
+      const response = await api.get("/wallet", {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      setWallet(response.data);
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      setWallet(response.data)
     } catch (err) {
-      console.error('Error fetching wallet:', err);
-      setError('Failed to load wallet data');
+      console.error("Error fetching wallet:", err)
+      setError("Failed to load wallet data")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleTransfer = async (e) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
-      setTransferLoading(true);
-      setError(null);
-      setSuccess(null);
-      
-      const token = localStorage.getItem('token');
-      await api.post('/wallet/transfer', transferData, {
+      setTransferLoading(true)
+      setError(null)
+      setSuccess(null)
+
+      const token = localStorage.getItem("token")
+      await api.post("/wallet/transfer", transferData, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      setSuccess('Transfer successful!');
-      
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      setSuccess("Transfer successful!")
+
       // Reset form and refresh wallet data
-      setTransferData({ recipientId: '', amount: '', description: '' });
-      fetchWalletData();
+      setTransferData({ recipientId: "", amount: "", description: "" })
+      fetchWalletData()
     } catch (err) {
-      console.error('Transfer error:', err);
-      setError(err.response?.data?.message || 'Transfer failed');
+      console.error("Transfer error:", err)
+      setError(err.response?.data?.message || "Transfer failed")
     } finally {
-      setTransferLoading(false);
+      setTransferLoading(false)
     }
-  };
+  }
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setTransferData(prev => ({
+    const { name, value } = e.target
+    setTransferData((prev) => ({
       ...prev,
-      [name]: value
-    }));
-  };
+      [name]: value,
+    }))
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl text-gray-600">Loading...</div>
-      </div>
-    );
+      <WalletContainer>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-2xl text-white">Loading...</div>
+        </div>
+      </WalletContainer>
+    )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
-      >
-        {/* Wallet Info */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-          <h2 className="text-2xl font-bold text-white mb-6">Your Wallet</h2>
-          
-          <div className="mb-8">
-            <p className="text-gray-400 text-lg mb-2">Current Balance</p>
-            <p className="text-3xl font-bold text-white">{wallet?.balance || 0} tokens</p>
-          </div>
+    <WalletContainer>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <WalletGrid>
+          {/* Wallet Info */}
+          <WalletCard>
+            <Heading2>Your Wallet</Heading2>
 
-          {/* Transaction History */}
-          <div>
-            <h3 className="text-xl font-semibold text-white mb-4">Transaction History</h3>
-            <div className="space-y-4">
+            <BalanceContainer>
+              <BalanceLabel>Current Balance</BalanceLabel>
+              <BalanceAmount>
+                <span>{wallet?.balance || 0}</span> tokens
+              </BalanceAmount>
+            </BalanceContainer>
+
+            {/* Transaction History */}
+            <TransactionsList>
+              <Heading3>Transaction History</Heading3>
+
               {wallet?.transactions?.map((transaction, index) => (
-                <div
-                  key={index}
-                  className="bg-gray-700 p-4 rounded-lg flex justify-between items-center"
-                >
-                  <div>
-                    <p className="text-white font-medium">{transaction.description}</p>
-                    <p className="text-sm text-gray-400">
-                      {new Date(transaction.date).toLocaleString()}
-                    </p>
-                  </div>
-                  <p className={`font-bold ${
-                    transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {transaction.type === 'credit' ? '+' : '-'}{transaction.amount}
-                  </p>
-                </div>
+                <TransactionItem key={index}>
+                  <TransactionInfo>
+                    <TransactionDescription>{transaction.description}</TransactionDescription>
+                    <TransactionDate>{new Date(transaction.date).toLocaleString()}</TransactionDate>
+                  </TransactionInfo>
+                  <TransactionAmount type={transaction.type}>
+                    {transaction.type === "credit" ? "+" : "-"}
+                    {transaction.amount}
+                  </TransactionAmount>
+                </TransactionItem>
               ))}
+
               {(!wallet?.transactions || wallet.transactions.length === 0) && (
-                <p className="text-gray-400 text-center">No transactions found</p>
+                <Paragraph style={{ textAlign: "center", marginTop: "2rem" }}>No transactions found</Paragraph>
               )}
-            </div>
-          </div>
-        </div>
+            </TransactionsList>
+          </WalletCard>
 
-        {/* Transfer Form */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-          <h2 className="text-2xl font-bold text-white mb-6">Transfer Tokens</h2>
+          {/* Transfer Form */}
+          <WalletCard>
+            <Heading2>Transfer Tokens</Heading2>
 
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-red-500/20 text-red-500 p-4 rounded-lg mb-6"
-            >
-              {error}
-            </motion.div>
-          )}
+            {error && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <ErrorMessage>{error}</ErrorMessage>
+              </motion.div>
+            )}
 
-          {success && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-green-500/20 text-green-500 p-4 rounded-lg mb-6"
-            >
-              {success}
-            </motion.div>
-          )}
+            {success && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <SuccessMessage>{success}</SuccessMessage>
+              </motion.div>
+            )}
 
-          <form onSubmit={handleTransfer} className="space-y-6">
-            <div>
-              <label className="block text-gray-400 mb-2">Recipient ID</label>
-              <input
-                type="text"
-                name="recipientId"
-                value={transferData.recipientId}
-                onChange={handleInputChange}
-                required
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter recipient's ID"
-              />
-            </div>
+            <TransferForm onSubmit={handleTransfer}>
+              <FormGroup>
+                <Input
+                  type="text"
+                  name="recipientId"
+                  label="Recipient ID"
+                  placeholder="Enter recipient's ID"
+                  value={transferData.recipientId}
+                  onChange={handleInputChange}
+                  required
+                />
+              </FormGroup>
 
-            <div>
-              <label className="block text-gray-400 mb-2">Amount</label>
-              <input
-                type="number"
-                name="amount"
-                value={transferData.amount}
-                onChange={handleInputChange}
-                required
-                min="1"
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter amount to transfer"
-              />
-            </div>
+              <FormGroup>
+                <Input
+                  type="number"
+                  name="amount"
+                  label="Amount"
+                  placeholder="Enter amount to transfer"
+                  value={transferData.amount}
+                  onChange={handleInputChange}
+                  required
+                  min="1"
+                />
+              </FormGroup>
 
-            <div>
-              <label className="block text-gray-400 mb-2">Description</label>
-              <input
-                type="text"
-                name="description"
-                value={transferData.description}
-                onChange={handleInputChange}
-                required
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter transfer description"
-              />
-            </div>
+              <FormGroup>
+                <Input
+                  type="text"
+                  name="description"
+                  label="Description"
+                  placeholder="Enter transfer description"
+                  value={transferData.description}
+                  onChange={handleInputChange}
+                  required
+                />
+              </FormGroup>
 
-            <button
-              type="submit"
-              disabled={transferLoading}
-              className={`w-full py-2 px-4 rounded-lg ${
-                transferLoading
-                  ? 'bg-blue-500/50 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600'
-              } transition-colors text-white font-medium`}
-            >
-              {transferLoading ? 'Processing...' : 'Transfer Tokens'}
-            </button>
-          </form>
-        </div>
+              <Button type="submit" disabled={transferLoading}>
+                {transferLoading ? "Processing..." : "Transfer Tokens"}
+              </Button>
+            </TransferForm>
+          </WalletCard>
+        </WalletGrid>
       </motion.div>
-    </div>
-  );
+    </WalletContainer>
+  )
 }
 
-export default Wallet;
+export default Wallet
