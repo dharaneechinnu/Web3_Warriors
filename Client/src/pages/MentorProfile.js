@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import api from '../services/api';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Web3 from 'web3';
+import { address } from '../services/contractAddress';
+import { contractabi } from '../services/abi';
 
 function MentorProfile() {
   const { id } = useParams();
@@ -10,6 +12,7 @@ function MentorProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchMentorProfile();
@@ -19,7 +22,6 @@ function MentorProfile() {
     try {
       setLoading(true);
       setError(null);
-      
       const response = await api.get(`mentorship/getMentor/${id}`);
       setProfile(response.data);
     } catch (err) {
@@ -42,26 +44,23 @@ function MentorProfile() {
       const accounts = await web3.eth.getAccounts();
       const sender = accounts[0];
 
-      const contractAddress = "YOUR_CONTRACT_ADDRESS"; 
-      const contractABI = [
-        {
-          "constant": false,
-          "inputs": [
-            { "name": "_to", "type": "address" },
-            { "name": "_amount", "type": "uint256" }
-          ],
-          "name": "transferForMentorship",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        }
-      ];
+      const contractAddress = address;
+      const contract = new web3.eth.Contract(contractabi, contractAddress);
+      const mentorWallet = profile?.mentorship?.UserWalletAddress;
+      if (!mentorWallet) {
+        alert("Mentor's wallet address is not available.");
+        return;
+      }
 
-      const contract = new web3.eth.Contract(contractABI, contractAddress);
-      const amountToSend = web3.utils.toWei("0.01", "ether"); 
+      const amountToSend = web3.utils.toWei("10", "ether");
+      const transaction = await contract.methods.transfer(mentorWallet, amountToSend).send({ from: sender });
+      setSuccess("Tokens sent successfully!");
 
-      await contract.methods.transferForMentorship(profile.mentorship.walletAddress, amountToSend).send({ from: sender });
-      setSuccess("Transaction successful!");
+      await api.post("/mentorship/notifyMentor", {
+        mentorAddress: profile?.mentorship?.email,
+      });
+
+      navigate("/dashboard");
     } catch (err) {
       console.error("Transaction failed:", err);
       setError("Transaction failed. Please try again.");
@@ -89,10 +88,8 @@ function MentorProfile() {
               Pay for Mentorship
             </button>
           </div>
-
           {error && <div className="bg-red-500/20 text-red-500 p-4 rounded-lg mb-6">{error}</div>}
           {success && <div className="bg-green-500/20 text-green-500 p-4 rounded-lg mb-6">{success}</div>}
-
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold text-white mb-2">Name</h2>
@@ -108,7 +105,7 @@ function MentorProfile() {
             </div>
             <div>
               <h2 className="text-xl font-semibold text-white mb-2">Wallet Address</h2>
-              <p className="text-gray-300">{profile?.mentorship?.walletAddress || 'Not available'}</p>
+              <p className="text-gray-300">{profile?.mentorship?.UserWalletAddress || 'Not available'}</p>
             </div>
           </div>
         </div>

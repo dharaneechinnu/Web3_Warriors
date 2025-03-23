@@ -160,15 +160,12 @@ function Dashboard() {
     try {
     
   
-      if (!userId) {
-        setError('User ID is missing.');
-        return;
-      }
+      const users = localStorage.getItem("userId");
   
   
-      console.log("User ID in dashboard for profile update:", userId);
+      console.log("User ID in dashboard for profile update:", users);
       
-      const response = await api.put(`/profile/${userId}`, editForm);
+      const response = await api.put(`User/profile/${users}`, editForm);
   
       if (response.status === 200) {
         setIsEditing(false);
@@ -428,8 +425,8 @@ function Dashboard() {
             className="w-full p-2 rounded bg-gray-700 text-white"
           >
             <option value="">Select Gender</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
+            <option value="male">male</option>
+            <option value="female">female</option>
             <option value="Other">Other</option>
           </select>
         </div>

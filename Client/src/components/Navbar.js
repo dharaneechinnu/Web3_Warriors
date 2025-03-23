@@ -1,17 +1,42 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import Web3 from 'web3';
 import api from '../services/api';
+import { contractabi } from '../services/abi';
+import {address} from '../services/contractAddress'
+const contractABI = contractabi;
+const contractAddress = address; // Replace with your token contract address
 
 function Navbar() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
-  const [coin,setcoins]= useState('');
+  const [coin, setCoins] = useState('0');
 
-  useEffect(()=>{
-    const coinss = localStorage.getItem('tokencoin');
-    setcoins(coinss);
-  })
+  useEffect(() => {
+    const storedCoins = localStorage.getItem('tokencoin');
+    if (storedCoins) setCoins(storedCoins);
+  }, []);
+
+  const getTokenBalance = async () => {
+    if (window.ethereum) {
+      try {
+        const web3 = new Web3(window.ethereum);
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const accounts = await web3.eth.getAccounts();
+        const contract = new web3.eth.Contract(contractABI, contractAddress);
+        const balance = await contract.methods.balanceOf(accounts[0]).call();
+        const formattedBalance = web3.utils.fromWei(balance, 'ether'); // Convert to readable format
+        setCoins(formattedBalance);
+        localStorage.setItem('tokencoin', formattedBalance);
+      } catch (error) {
+        console.error("Error fetching token balance:", error);
+      }
+    } else {
+      alert("Please install MetaMask to interact with the contract.");
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await api.post('/auth/logout', {}, {
@@ -22,6 +47,7 @@ function Navbar() {
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
       localStorage.removeItem('userId');
+      localStorage.removeItem('tokencoin');
       navigate('/login');
     } catch (err) {
       console.error('Logout error:', err);
@@ -41,12 +67,17 @@ function Navbar() {
           <div className="flex items-center space-x-4">
             {token ? (
               <>
-               <Link
-                  to="/wallet"
-                  className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  TokenCoins  : {coin}
-                </Link>
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-300 px-3 py-2 text-sm font-medium">
+                    TokenCoins: {coin}
+                  </span>
+                  <button
+                    onClick={getTokenBalance}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-md text-sm"
+                  >
+                    Refresh
+                  </button>
+                </div>
                 <Link
                   to="/dashboard"
                   className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
