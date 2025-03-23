@@ -93,8 +93,9 @@ It allows users to register, participate in courses, offer mentorship, and be re
 3. **Create a .env file:**
    ```
    PORT=3500
-   MONGODB_URI=mongodb://localhost:27017/skill-exchange
-   JWT_SECRET=your-secret-key
+   MONGODB=mongodb://localhost:27017/skill-exchange
+   PASS=EMAIL_PASSKEY
+   ACCESS_TOKEN=Your-secret-KEY
    ```
 
 4. **Start the server:**
