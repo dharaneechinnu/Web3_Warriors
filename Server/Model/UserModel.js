@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
   },
   UserWalletAddress: {
     type: String,
+    default:null
   },
   dob: {
     type: Date,

@@ -152,9 +152,17 @@ function Dashboard() {
     e.preventDefault();
     
     try {
-      const users = localStorage.getItem("userId");
+    
+  
+      if (!userId) {
+        setError('User ID is missing.');
+        return;
+      }
+  
+  
+      console.log("User ID in dashboard for profile update:", userId);
       
-      const response = await api.put(`User/profile/${users}`, editForm);
+      const response = await api.put(`User/profile/${userId}`, editForm);
   
       if (response.status === 200) {
         setIsEditing(false);
@@ -477,164 +485,96 @@ function Dashboard() {
                   </motion.button>
                 </div>
 
-                <div className="group backdrop-blur-xl bg-white/5 rounded-2xl p-6 border border-white/10">
-                  {isEditing ? (
-                    <form onSubmit={handleProfileUpdate} className="space-y-5">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-gray-300 mb-2">Name</label>
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-300 mb-2">Mobile Number</label>
-                          <input
-                            type="text"
-                            value={editForm.mobileNo}
-                            onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-300 mb-2">Wallet Address</label>
-                          <input
-                            type="text"
-                            value={editForm.UserWalletAddress}
-                            onChange={(e) => setEditForm({ ...editForm, UserWalletAddress: e.target.value })}
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-300 mb-2">Gender</label>
-                          <select
-                            value={editForm.gender}
-                            onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          >
-                            <option value="">Select Gender</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-gray-300 mb-2">Date of Birth</label>
-                          <input
-                            type="date"
-                            value={editForm.dob}
-                            onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-300 mb-2">Skills (comma-separated)</label>
-                          <input
-                            type="text"
-                            value={editForm.skills.join(', ')}
-                            onChange={(e) =>
-                              setEditForm({ ...editForm, skills: e.target.value.split(',').map(skill => skill.trim()) })
-                            }
-                            className="w-full p-3 rounded-xl bg-white/5 backdrop-blur-lg text-white border border-white/10 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 transition-all"
-                          />
-                        </div>
-                      </div>
-                      
-                      <motion.button 
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        type="submit" 
-                        className="mt-6 bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-orange-500 text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-fuchsia-500/20 hover:shadow-fuchsia-500/40 transition-all"
-                      >
-                        Save Changes
-                      </motion.button>
-                    </form>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                      <div className="p-4 bg-white/5 backdrop-blur-lg rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Name</h3>
-                        <p className="text-lg font-medium">{userProfile.name}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 backdrop-blur-lg rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Mobile Number</h3>
-                        <p className="text-lg font-medium">{userProfile.mobileNo || 'Not provided'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Wallet Address</h3>
-                        <p className="text-lg font-medium truncate">{userProfile.UserWalletAddress || 'Not connected'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Gender</h3>
-                        <p className="text-lg font-medium">{userProfile.gender || 'Not specified'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Date of Birth</h3>
-                        <p className="text-lg font-medium">{userProfile.dob || 'Not provided'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Tokens</h3>
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Tokens</h3>
-                        <p className="text-lg font-medium">
-                          <span className="text-indigo-400">{userProfile.tokens || 0}</span> tokens
-                        </p>
-                      </div>
-                      
-                      <div className="md:col-span-2 p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Skills</h3>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {userProfile.skills?.length > 0 ? (
-                            userProfile.skills.map((skill, index) => (
-                              <span key={index} className="bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/30 px-3 py-1 rounded-lg text-sm">
-                                {skill}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-gray-400">No skills added yet</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Courses Completed</h3>
-                        <div className="flex items-center">
-                          <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-                            {userProfile.coursesCompleted?.length || 0}
-                          </span>
-                          <div className="ml-4 h-2 w-24 bg-gray-700 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500" 
-                              style={{ 
-                                width: `${userProfile.coursesCompleted?.length ? Math.min(userProfile.coursesCompleted.length * 10, 100) : 0}%` 
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="p-4 bg-gray-800/80 rounded-xl">
-                        <h3 className="text-sm uppercase text-gray-400 mb-1">Courses Taught</h3>
-                        <div className="flex items-center">
-                          <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-                            {userProfile.coursesTaught?.length || 0}
-                          </span>
-                          <div className="ml-4 h-2 w-24 bg-gray-700 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500" 
-                              style={{ 
-                                width: `${userProfile.coursesTaught?.length ? Math.min(userProfile.coursesTaught.length * 10, 100) : 0}%` 
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+    {isEditing ? (
+      <form onSubmit={handleProfileUpdate} className="space-y-4">
+        <div>
+          <label className="block mb-1">Name</label>
+          <input
+            type="text"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Mobile Number</label>
+          <input
+            type="text"
+            value={editForm.mobileNo}
+            onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Wallet Address</label>
+          <input
+            type="text"
+            value={editForm.UserWalletAddress}
+            onChange={(e) => setEditForm({ ...editForm, UserWalletAddress: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Gender</label>
+          <select
+            value={editForm.gender}
+            onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          >
+            <option value="">Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1">Date of Birth</label>
+          <input
+            type="date"
+            value={editForm.dob}
+            onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Skills (comma-separated)</label>
+          <input
+            type="text"
+            value={editForm.skills.join(', ')}
+            onChange={(e) =>
+              setEditForm({ ...editForm, skills: e.target.value.split(',').map(skill => skill.trim()) })
+            }
+            className="w-full p-2 rounded bg-gray-700 text-white"
+          />
+        </div>
+        <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+          Save Changes
+        </button>
+      </form>
+    ) : (
+      <div className="space-y-2">
+        <p><span className="font-semibold">Name:</span> {userProfile.name}</p>
+        <p><span className="font-semibold">Mobile No:</span> {userProfile.mobileNo || 'N/A'}</p>
+        <p><span className="font-semibold">Wallet Address:</span> {userProfile.UserWalletAddress || 'N/A'}</p>
+        <p><span className="font-semibold">Gender:</span> {userProfile.gender || 'N/A'}</p>
+        <p><span className="font-semibold">Date of Birth:</span> {userProfile.dob || 'N/A'}</p>
+        <p><span className="font-semibold">Tokens:</span> {userProfile.tokens}</p>
+        <div>
+          <span className="font-semibold">Skills:</span>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {userProfile.skills?.map((skill, index) => (
+              <span key={index} className="bg-blue-500 px-2 py-1 rounded text-sm">
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p><span className="font-semibold">Courses Completed:</span> {userProfile.coursesCompleted?.length}</p>
+        <p><span className="font-semibold">Courses Taught:</span> {userProfile.coursesTaught?.length}</p>
+      </div>
+    )}
+  </div>
+)}
 
             {activeTab === 'mentorship' && (
               <div>
