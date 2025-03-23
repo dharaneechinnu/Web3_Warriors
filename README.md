@@ -49,4 +49,99 @@ It allows users to register, participate in courses, offer mentorship, and be re
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/dharaneechinnu/Web3_Warriors.git
+   ```
+
+2. **Navigate to the client directory:**
+   ```bash
+   cd Client
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+   or
+    ```bash
+   npm install --legacy-peer-deps
+   ```
+
+4. **Start the development server:**
+   ```bash
+   npm start
+   ```
+
+## Backend Setup (Node.js)
+
+### Prerequisites
+- **Node.js** (v14.x or later)
+- **MongoDB** (v4.x or later)
+- **npm** (v6.x or later)
+
+### Steps to Set Up the Backend
+
+1. **Navigate to the server directory:**
+   ```bash
+   cd Server
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Create a .env file:**
+   ```
+   PORT=3500
+   MONGODB_URI=mongodb://localhost:27017/skill-exchange
+   JWT_SECRET=your-secret-key
+   ```
+
+4. **Start the server:**
+   ```bash
+   npm run dev
+   ```
+
+## Tech Stack
+
+### Frontend
+- React.js
+- Web3.js
+- Framer Motion
+- Axios
+- Material-UI
+
+### Backend
+- Node.js
+- Express.js
+- MongoDB
+- JWT Authentication
+- Web3
+
+### Blockchain
+- Solidity
+- remix IDE
+- OpenZeppelin
+- Ethereum
+
+## Smart Contract
+
+The platform uses custom ERC-20 tokens for transactions. The smart contract includes:
+
+- Token minting and burning
+- Course enrollment
+- Mentorship session booking
+- Reward distribution
+
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
