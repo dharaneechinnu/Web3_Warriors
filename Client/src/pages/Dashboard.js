@@ -45,9 +45,9 @@ function Dashboard() {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      switch(activeTab) {
+      switch(activeTab) { 
         case 'learner':
-          const coursesRes = await api.get('/courses/getall', { headers });
+          const coursesRes = await api.get('/courses/getall/', { headers });
           console.log("Course details : ",coursesRes.data)
           setCourses(coursesRes.data);
           break;
@@ -211,12 +211,6 @@ function Dashboard() {
           Mentorship
         </button>
         <button 
-          onClick={() => setActiveTab('enrolled')}
-          className={`px-4 py-2 rounded ${activeTab === 'enrolled' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
-        >
-          Enrolled Courses
-        </button>
-        <button 
           onClick={() => setActiveTab('profile')}
           className={`px-4 py-2 rounded ${activeTab === 'profile' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
         >
@@ -290,8 +284,8 @@ function Dashboard() {
             <h2 className="text-2xl font-bold text-white mb-4">My Enrolled Courses</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {enrolledCourses.map((course) => {
-                const thumbnailPath = course.thumbnail ? `http://localhost:3500/uploads/images/${course.thumbnail.split('\\').pop()}` : '/fallback-image.jpg';
-                const videoPath = course.video ? `http://localhost:3500/uploads/videos/${course.video.split('\\').pop()}` : '';
+                const thumbnailPath = course.thumbnail ? `http://localhost:3500/${course.thumbnail.split('\\').pop()}` : '/fallback-image.jpg';
+                const videoPath = course.video ? `http://localhost:3500/${course.video.split('\\').pop()}` : '';
                 console.log(course._id)
                 return (
                   <div key={course._id} className="bg-gray-700 rounded-lg overflow-hidden shadow-xl">
