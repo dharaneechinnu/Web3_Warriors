@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
-import api from "../services/api"
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import api from "../services/api";
 
 const LiveSessions = () => {
   const [sessions, setSessions] = useState([])
@@ -68,6 +68,19 @@ const LiveSessions = () => {
       setError(err.response?.data?.message || "Failed to enroll in session")
     }
   }
+
+  const getId = (val) => {
+    if (!val && val !== 0) return null;
+    if (typeof val === 'string' || typeof val === 'number') return String(val);
+    if (typeof val === 'object') return String(val._id || val.id || '');
+    return null;
+  };
+
+  const isSessionMentor = (session) => {
+    const mentorIdVal = getId(session.mentor) || getId(session.mentorId) || getId(session.owner);
+    const userIdVal = getId(localStorage.getItem('userId'));
+    return Boolean(mentorIdVal && userIdVal && String(mentorIdVal) === String(userIdVal));
+  };
 
   const filterSessions = () => {
     let filtered = [...sessions]
@@ -202,13 +215,19 @@ const LiveSessions = () => {
                     </div>
                   </div>
 
-                  {isUpcoming && !session.enrolled && (
+                  {isUpcoming && !session.enrolled && !isSessionMentor(session) && (
                     <button
                       onClick={() => handleEnroll(session._id)}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors duration-300"
                     >
                       Enroll Now
                     </button>
+                  )}
+
+                  {isSessionMentor(session) && (
+                    <div className="w-full py-2 bg-yellow-500/10 border border-yellow-500 text-yellow-300 text-center rounded-lg font-semibold">
+                      You are the instructor for this session
+                    </div>
                   )}
 
                   {session.enrolled && (

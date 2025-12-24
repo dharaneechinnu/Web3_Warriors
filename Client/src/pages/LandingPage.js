@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { motion } from "framer-motion"
+import { useEffect, useRef } from "react";
+import { Link } from 'react-router-dom';
+import { motion } from "framer-motion";
 
 const LandingPage = () => {
   const canvasRef = useRef(null)
@@ -103,12 +104,12 @@ const LandingPage = () => {
                 Join our innovative learning platform where your achievements are securely recorded on the blockchain. Earn rewards while mastering new skills.
               </p>
               <div className="flex flex-wrap gap-6">
-                <button className="px-10 py-5 bg-gradient-to-tr from-cyan-500 via-fuchsia-500 to-orange-500 rounded-full font-bold text-lg hover:shadow-xl hover:shadow-fuchsia-500/20 transition-all transform hover:-translate-y-1">
+                <Link to="/login/learner" className="px-10 py-5 bg-gradient-to-tr from-cyan-500 via-fuchsia-500 to-orange-500 rounded-full font-bold text-lg hover:shadow-xl hover:shadow-fuchsia-500/20 transition-all transform hover:-translate-y-1">
                   Start Learning
-                </button>
-                <button className="px-10 py-5 bg-white/5 backdrop-blur-lg border border-white/10 rounded-full font-bold text-lg hover:bg-white/10 transition-all">
+                </Link>
+                <Link to="/login/mentor" className="px-10 py-5 bg-white/5 backdrop-blur-lg border border-white/10 rounded-full font-bold text-lg hover:bg-white/10 transition-all">
                   Become a Mentor
-                </button>
+                </Link>
               </div>
             </motion.div>
 
@@ -210,12 +211,12 @@ const LandingPage = () => {
               Join thousands of learners who are already earning while learning on our platform
             </p>
             <div className="flex flex-wrap gap-6 justify-center">
-              <button className="px-12 py-6 bg-gradient-to-tr from-cyan-500 via-fuchsia-500 to-orange-500 rounded-full text-xl font-bold hover:shadow-xl hover:shadow-fuchsia-500/20 transition-all transform hover:-translate-y-1">
+              <Link to="/register/learner" className="px-12 py-6 bg-gradient-to-tr from-cyan-500 via-fuchsia-500 to-orange-500 rounded-full text-xl font-bold hover:shadow-xl hover:shadow-fuchsia-500/20 transition-all transform hover:-translate-y-1">
                 Enroll Now
-              </button>
-              <button className="px-12 py-6 bg-white/5 backdrop-blur-lg border border-white/10 rounded-full text-xl font-bold hover:bg-white/10 transition-all">
+              </Link>
+              <Link to="/learner-home" className="px-12 py-6 bg-white/5 backdrop-blur-lg border border-white/10 rounded-full text-xl font-bold hover:bg-white/10 transition-all">
                 View Courses
-              </button>
+              </Link>
             </div>
           </motion.div>
         </div>

@@ -28,6 +28,10 @@ router.get("/enrolled/:userId", courseController.getEnrolledCourses);
 
 router.get("/mentor/:mentorId", courseController.getMentorCourses);
 
+// Progress tracking routes
+router.post('/updateLectureProgress', courseController.updateLectureProgress);
+router.get('/progress/:learnerId/:courseId', courseController.getCourseProgress);
+
 // Update progress for learner
 router.post('/updateProgress', courseController.updateProgress);
 
@@ -36,12 +40,27 @@ router.get('/getProgress/:learnerId/:courseId', courseController.getProgress);
 
 
 
-// Mark course as completed
-router.post("/complete", courseController.completeCourse);
+// Mark course as completed and award certification
+router.post("/complete/:courseId/:userId", courseController.completeCourse);
 
 // Get all completed courses for a learner
 router.get("/completed/:learnerId", courseController.getCompletedCourses);
 
+// Update course
+router.put(
+    "/update/:id",
+    upload.fields([
+        { name: "image", maxCount: 1 },
+        { name: "thumbnail", maxCount: 1 },
+        { name: "video", maxCount: 1 }
+    ]),
+    courseController.updateCourse
+);
 
+// Delete course
+router.delete("/delete/:id", courseController.deleteCourse);
+
+// Save course curriculum (sections and lectures)
+router.post("/save-curriculum", courseController.saveCurriculum);
 
 module.exports = router;

@@ -5,9 +5,11 @@ import { useNavigate, Link, useLocation } from "react-router-dom"
 import styled, { keyframes, css } from "styled-components"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
-import Button from "../../components/ui/Button"
-import Input from "../../components/ui/Input"
-import { Heading2, Paragraph, GradientSpan } from "../../components/ui/Typography"
+import { useAuth } from "../../contexts/AuthContext"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import AuthBackground from "@/components/ui/AuthBackground";
+import { Heading2, Paragraph, GradientSpan } from "@/components/ui/Typography";
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -25,18 +27,7 @@ const LoginContainer = styled.div`
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(79, 70, 229, 0.1));
 `
 
-const LoginBackground = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: 
-    radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.15), transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(79, 70, 229, 0.15), transparent 40%);
-  z-index: 0;
-  filter: blur(80px);
-`
+/* AuthBackground replaces static LoginBackground */
 
 const LoginCard = styled(motion.div)`
   width: 100%;
@@ -88,6 +79,7 @@ const MessageContainer = styled(motion.div)`
 function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -105,11 +97,18 @@ function Login() {
       const response = await axios.post('http://localhost:3500/Auth/login', formData);
       
       if (response.data) {
-        localStorage.setItem('token', response.data.accessToken);
-        localStorage.setItem('userRole', response.data.user.role || "user");
-        localStorage.setItem('userId', response.data.user._id);
-        localStorage.setItem('tokencoin', response.data.user.tokenBalance);
-        navigate('/dashboard');
+        // Use AuthContext login method to persist auth
+        const loginResult = login(response.data);
+
+        if (loginResult.success) {
+          // Determine default destination based on role
+          const role = response.data.user?.role || response.data.user?.userType || 'learner';
+          const defaultPath = role === 'mentor' ? '/mentor-home' : '/learner-home';
+          const from = location.state?.from?.pathname || defaultPath;
+          navigate(from, { replace: true });
+        } else {
+          setError(loginResult.error || 'Login failed');
+        }
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -129,7 +128,7 @@ function Login() {
 
   return (
     <LoginContainer>
-      <LoginBackground />
+      <AuthBackground />
       <LoginCard
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

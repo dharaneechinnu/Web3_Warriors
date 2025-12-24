@@ -4,6 +4,49 @@ const jwt = require('jsonwebtoken');
 const PASS = process.env.PASS;
 const nodemailer = require('nodemailer');
 
+function generateOTP() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+async function sendVerificationOtpToUser(user) {
+    try {
+        const otp = generateOTP();
+        user.otpToken = otp;
+        user.otpExpire = Date.now() + 3600000; // 1 hour
+        await user.save();
+
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+                user: "dharaneedharanchinnusamy@gmail.com",
+                pass: PASS
+            }
+        });
+
+        const mailOptions = {
+            from: "dharaneedharanchinnusamy@gmail.com",
+            to: user.email,
+            subject: "Email Verification OTP",
+            html: `
+              <div style="color: black; font-size: 20px;">
+                <p>Hello ${user.name || ''},</p>
+                <p><strong>Your OTP for email verification is:</strong></p>
+                <h1 style="color: black;">${otp}</h1>
+                <p>Please use this OTP to verify your email. It expires in 1 hour.</p>
+                <p>Best regards,<br/>Your App Team</p>
+              </div>
+            `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log('Verification OTP sent to', user.email);
+        return { success: true, message: 'Verification OTP sent to email' };
+    } catch (err) {
+        console.error('Error sending verification OTP:', err);
+        return { success: false, message: 'Failed to send verification OTP email' };
+    }
+}
+
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -41,12 +84,15 @@ console.log(email,password)
 
 const register = async (req, res) => {
     try {
-        const { name, password, email, dob, gender, mobileNo } = req.body;
+        const { name, password, email, dob, gender, mobileNo, role } = req.body;
 
         // Validate input data
         if (!name || !password || !email || !dob || !gender || !mobileNo) {
             return res.status(400).json({ message: 'All fields are required' });
         }
+
+        // Validate role when provided
+        const userRole = role && ['learner', 'mentor'].includes(role.toLowerCase()) ? role.toLowerCase() : 'learner';
 
         // Check if user already exists by email
         const existingUser = await usermodel.findOne({ email });
@@ -57,19 +103,36 @@ const register = async (req, res) => {
         // Hash the password
         const hashpwd = await bcrypt.hash(password, 10);
 
-        // Create the new user with initial balance set to 10
-        await usermodel.create({
+        // Set initial balance depending on role (learners get 10 by default)
+        const initialBalance = userRole === 'mentor' ? 0 : 10;
+
+        // Create the new user with role and initial balance
+        const created = await usermodel.create({
             name,
             password: hashpwd,
             email,
             mobileNo,
             dob,
             gender,
-            tokenBalance: 10,  // Set initial balance to 10
+            tokenBalance: initialBalance,
+            role: userRole,
         });
 
-        // Send success response
-        return res.status(200).json({ message: 'User registered successfully', balance: 10 });
+        // Prepare role-specific success message
+        const roleLabel = userRole === 'mentor' ? 'Mentor' : 'Learner';
+
+        // Send verification OTP to the newly created user
+        const otpResult = await sendVerificationOtpToUser(created);
+
+        // Return success response with role and starting balance and OTP send status
+        return res.status(200).json({
+            success: true,
+            message: `${roleLabel} registered successfully`,
+            role: userRole,
+            balance: initialBalance,
+            user: { id: created._id, email: created.email },
+            otp: { sent: otpResult.success, message: otpResult.message }
+        });
     } catch (error) {
         console.error('Error registering user:', error);
 
@@ -83,11 +146,6 @@ const register = async (req, res) => {
   
 
 const gtpOtps = async (req, res) => {
-    function generateOTP() {
-        return Math.floor(1000 + Math.random() * 9000).toString();
-    }
-    
-
     try {
         const { email } = req.body;
 
@@ -101,45 +159,9 @@ const gtpOtps = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        const otp = generateOTP();
-
-        user.otpToken = otp;
-        user.otpExpire = Date.now() + 3600000; // 1 hour expiry time
-
-        await user.save();
-
-        const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: "dharaneedharanchinnusamy@gmail.com",
-                pass: PASS
-            }
-        });
-
-        const mailOptions = {
-            from: "dharaneedharanchinnusamy@gmail.com",
-            to: email,
-            subject: "Email Verification OTP",
-            html: `
-              <div style="color: black; font-size: 20px;">
-                <p>Hello,</p>
-                <p><strong>Your OTP for email verification is:</strong></p>
-                <h1 style="color: black;">${otp}</h1>
-                <p>Please use this OTP to verify your email.</p>
-                <p>Best regards,<br/>Your App Team</p>
-              </div>
-            `
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.error("Error sending verification OTP email:", error);
-                return res.status(500).json({ message: "Failed to send verification OTP email" });
-            }
-            console.log("Verification OTP email sent:", info.response,otp);
-            res.status(200).json({ message: "Verification OTP sent to email" });
-        });
-
+        const result = await sendVerificationOtpToUser(user);
+        if (result.success) return res.status(200).json({ message: result.message });
+        return res.status(500).json({ message: result.message });
     } catch (error) {
         console.error("Error generating OTP:", error);
         res.status(500).json({ message: "Internal server error" });

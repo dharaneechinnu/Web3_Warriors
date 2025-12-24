@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import styled, { keyframes, css } from "styled-components"
-import { motion } from "framer-motion"
-import api from "../services/api"
-import Button from "../components/ui/Button"
-import Card from "../components/ui/Card"
-import Input from "../components/ui/Input"
-import { Heading2, Heading3, Paragraph } from "../components/ui/Typography"
+import { useState, useEffect } from "react";
+import styled, { keyframes, css } from "styled-components";
+import { motion } from "framer-motion";
+import api from "../services/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Heading2, Heading3, Paragraph } from "@/components/ui/Typography";
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(20px); }

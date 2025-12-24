@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams } from "react-router-dom"
-import styled, { keyframes, css } from "styled-components"
-import { motion } from "framer-motion"
-import Web3 from "web3"
-import api from "../services/api"
-import Button from "../components/ui/Button"
-import Card from "../components/ui/Card"
-import Badge from "../components/ui/Badge"
-import { Heading2, Heading3, Paragraph } from "../components/ui/Typography"
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import styled, { keyframes, css } from "styled-components";
+import { motion } from "framer-motion";
+import Web3 from "web3";
+import api from "../services/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Heading2, Heading3, Paragraph } from "@/components/ui/Typography";
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(20px); }

@@ -72,11 +72,33 @@ const userSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now },
     description: { type: String },
   }],
+  lectureProgress: [{
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+    lectureId: { type: String, required: true },
+    sectionId: { type: String, required: true },
+    completed: { type: Boolean, default: false },
+    progress: { type: Number, default: 0 }, // percentage 0-100 for lecture completion
+    videoProgress: { type: Number, default: 0 }, // percentage 0-100 for video watched
+    watchTime: { type: Number, default: 0 }, // seconds watched
+    totalDuration: { type: Number, default: 0 }, // total video duration in seconds
+    lastAccessed: { type: Date, default: Date.now }
+  }],
   skills: [{
     type: String,
   }],
   coursesCompleted: { type: Number, default: 0 },
   coursesTaught: { type: Number, default: 0 },
+  bio: { type: String, default: null },
+  experience: { type: String, default: null },
+  portfolio: { type: String, default: null },
+  education: [{
+    institution: { type: String, required: true },
+    degree: { type: String, required: true },
+    field: { type: String, required: true },
+    startYear: { type: Number, required: true },
+    endYear: { type: Number, required: true },
+    description: { type: String, default: null }
+  }],
   linkedin:{type:String,default:null},
   github:{type:String,default:null},
   rewards: [{
@@ -87,11 +109,14 @@ const userSchema = new mongoose.Schema({
 
   ratings: [{
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'UsersLogins' },
+    userEmail: { type: String },
     rating: { type: Number, min: 1, max: 5, required: true }, 
     review: { type: String, trim: true }, 
+    category: { type: String, enum: ['mentorship', 'course'], default: 'mentorship' },
     date: { type: Date, default: Date.now },
   }],
   averageRating: { type: Number, default: 0 },
+  role: { type: String, enum: ['learner', 'mentor', 'admin', 'user'], default: 'learner' },
 });
 
 
