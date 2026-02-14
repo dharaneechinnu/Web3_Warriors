@@ -84,7 +84,7 @@ console.log(email,password)
 
 const register = async (req, res) => {
     try {
-        const { name, password, email, dob, gender, mobileNo, role } = req.body;
+        const { name, password, email, dob, gender, mobileNo, role, skills } = req.body;
 
         // Validate input data
         if (!name || !password || !email || !dob || !gender || !mobileNo) {
@@ -106,6 +106,12 @@ const register = async (req, res) => {
         // Set initial balance depending on role (learners get 10 by default)
         const initialBalance = userRole === 'mentor' ? 0 : 10;
 
+        // Process skills: convert comma-separated string to array
+        let skillsArray = [];
+        if (skills && typeof skills === 'string' && skills.trim()) {
+            skillsArray = skills.split(',').map(skill => skill.trim()).filter(skill => skill.length > 0);
+        }
+
         // Create the new user with role and initial balance
         const created = await usermodel.create({
             name,
@@ -116,6 +122,7 @@ const register = async (req, res) => {
             gender,
             tokenBalance: initialBalance,
             role: userRole,
+            skills: skillsArray,
         });
 
         // Prepare role-specific success message

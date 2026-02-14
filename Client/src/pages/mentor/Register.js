@@ -60,12 +60,30 @@ function RegisterMentor(){
           </Row>
           <Row>
             <Input label="Date of Birth" type="date" name="dob" value={formData.dob} onChange={handleChange} required />
-            <Input label="Gender" type="select" name="gender" value={formData.gender} onChange={handleChange} required>
-              <option value="">Select</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </Input>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+              <label style={{fontSize:'0.875rem',fontWeight:500,color:'rgba(255,255,255,0.9)'}}>Gender</label>
+              <select 
+                name="gender" 
+                value={formData.gender} 
+                onChange={handleChange} 
+                required
+                style={{
+                  height:'2.5rem',
+                  width:'100%',
+                  borderRadius:'0.375rem',
+                  border:'1px solid rgba(124,58,237,0.2)',
+                  background:'rgba(17,17,27,0.5)',
+                  padding:'0 0.75rem',
+                  color:'#fff',
+                  fontSize:'0.875rem'
+                }}
+              >
+                <option value="">Select</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
           </Row>
           <Input label="Skills (comma separated)" name="skills" value={formData.skills} onChange={handleChange} placeholder="e.g. React, Blockchain" />
           <Button type="submit" disabled={loading}>{loading ? 'Creating Account...' : 'Create Account'}</Button>
