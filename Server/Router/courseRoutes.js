@@ -31,12 +31,8 @@ router.get("/mentor/:mentorId", courseController.getMentorCourses);
 // Progress tracking routes
 router.post('/updateLectureProgress', courseController.updateLectureProgress);
 router.get('/progress/:learnerId/:courseId', courseController.getCourseProgress);
-
-// Update progress for learner
-router.post('/updateProgress', courseController.updateProgress);
-
-// Get progress for learner in a specific course
-router.get('/getProgress/:learnerId/:courseId', courseController.getProgress);
+router.get('/progress/:learnerId/:courseId/:lectureId', courseController.getLectureProgress);
+router.get('/current-position/:learnerId/:courseId', courseController.getUserCurrentPosition);
 
 
 
@@ -62,5 +58,36 @@ router.delete("/delete/:id", courseController.deleteCourse);
 
 // Save course curriculum (sections and lectures)
 router.post("/save-curriculum", courseController.saveCurriculum);
+
+// Add quiz to a specific lecture
+router.post("/add-quiz", courseController.addQuizToLecture);
+
+// Add assignment to a specific lecture
+router.post("/add-assignment", courseController.addAssignmentToLecture);
+
+// Update article content for a specific lecture
+router.post("/update-article", courseController.updateArticleContent);
+
+// Get quiz data for a specific lecture
+router.get("/:courseId/section/:sectionIndex/lecture/:lectureIndex/quiz", courseController.getQuizData);
+
+// Get assignment data for a specific lecture
+router.get("/:courseId/section/:sectionIndex/lecture/:lectureIndex/assignment", courseController.getAssignmentData);
+
+// Get article data for a specific lecture
+router.get("/:courseId/section/:sectionIndex/lecture/:lectureIndex/article", courseController.getArticleData);
+
+// ============================================
+// LEARNER CONTENT RETRIEVAL ROUTES
+// ============================================
+
+// Get full course content for learner (structured curriculum)
+router.get("/learner/content/:courseId", courseController.getCourseContentForLearner);
+
+// Get specific lecture content
+router.get("/learner/:courseId/section/:sectionId/lecture/:lectureId", courseController.getLectureContent);
+
+// Submit quiz answers and get results
+router.post("/:courseId/section/:sectionIndex/lecture/:lectureIndex/quiz/submit", courseController.submitQuizAnswers);
 
 module.exports = router;

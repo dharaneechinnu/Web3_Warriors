@@ -919,6 +919,8 @@ const CourseUpload = () => {
   const [currentStage, setCurrentStage] = useState(1);
   const [stageValidation, setStageValidation] = useState({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalData, setModalData] = useState({ type: '', title: '', message: '' });
   
   const stages = [
     { id: 1, title: 'Course Details', subtitle: 'Title, Category & Difficulty' },
@@ -1299,34 +1301,240 @@ const CourseUpload = () => {
   };
 
   const validateForm = () => {
-    if (!courseForm.title.trim()) return 'Course title is required';
-    if (!courseForm.description.trim()) return 'Course description is required';
-    if (!courseForm.category) return 'Course category is required';
-    if (sections.length === 0) return 'Please add at least one section with lectures';
-    
-    for (let section of sections) {
-      if (!section.title.trim()) return 'Please fill in all section titles';
-      if (section.lectures.length === 0) return `Section "${section.title}" has no lectures`;
+    try {
+      console.log('🔍 Starting form validation...');
       
-      for (let lecture of section.lectures) {
-        if (!lecture.title.trim()) return `Please fill in all lecture titles in section "${section.title}"`;
-        if (lecture.type === 'video' && !lecture.isUploaded) {
-          return `Please upload video for "${lecture.title}" in section "${section.title}"`;
+      // Basic course info validation
+      if (!courseForm.title.trim()) {
+        throw new Error('📝 Course title is required');
+      }
+      if (!courseForm.description.trim()) {
+        throw new Error('📄 Course description is required');
+      }
+      if (!courseForm.category) {
+        throw new Error('🏷️ Course category is required');
+      }
+      if (!previewImage) {
+        throw new Error('🖼️ Course thumbnail is required');
+      }
+      
+      // Curriculum validation
+      if (sections.length === 0) {
+        throw new Error('📚 Please add at least one section with lectures');
+      }
+      
+      let totalLectures = 0;
+      let totalQuizzes = 0;
+      let totalAssignments = 0;
+      let totalArticles = 0;
+      let totalVideos = 0;
+      
+      for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+        const section = sections[sectionIndex];
+        
+        if (!section.title.trim()) {
+          throw new Error(`📑 Section ${sectionIndex + 1} title is required`);
+        }
+        
+        if (section.lectures.length === 0) {
+          throw new Error(`📚 Section "${section.title}" has no lectures. Each section needs at least one lecture.`);
+        }
+        
+        for (let lectureIndex = 0; lectureIndex < section.lectures.length; lectureIndex++) {
+          const lecture = section.lectures[lectureIndex];
+          totalLectures++;
+          
+          if (!lecture.title.trim()) {
+            throw new Error(`📝 Lecture ${lectureIndex + 1} in section "${section.title}" needs a title`);
+          }
+          
+          // Type-specific validation
+          switch (lecture.type) {
+            case 'video':
+              totalVideos++;
+              if (!lecture.isUploaded || !lecture.file) {
+                throw new Error(`🎥 Please upload video for "${lecture.title}" in section "${section.title}"`);
+              }
+              break;
+              
+            case 'quiz':
+              totalQuizzes++;
+              const quizData = quizDrafts[lecture.id] || lecture.quiz;
+              if (!quizData) {
+                throw new Error(`❓ Quiz "${lecture.title}" in section "${section.title}" has no data. Please configure the quiz.`);
+              }
+              if (!quizData.questions || quizData.questions.length === 0) {
+                throw new Error(`❓ Quiz "${lecture.title}" needs at least one question`);
+              }
+              
+              // Validate each question
+              for (let i = 0; i < quizData.questions.length; i++) {
+                const q = quizData.questions[i];
+                if (!q.question || !q.question.trim()) {
+                  throw new Error(`❓ Question ${i + 1} in quiz "${lecture.title}" is empty`);
+                }
+                
+                if (q.type === 'single_correct' || q.type === 'multiple_correct') {
+                  const validChoices = (q.choices || []).filter(c => c && c.trim());
+                  if (validChoices.length < 2) {
+                    throw new Error(`❓ Question ${i + 1} in quiz "${lecture.title}" needs at least 2 answer choices`);
+                  }
+                  
+                  if (q.type === 'single_correct' && (q.correctIndex === undefined || q.correctIndex === null)) {
+                    throw new Error(`❓ Question ${i + 1} in quiz "${lecture.title}" needs a correct answer selected`);
+                  }
+                  
+                  if (q.type === 'multiple_correct' && (!q.correctIndices || q.correctIndices.length === 0)) {
+                    throw new Error(`❓ Question ${i + 1} in quiz "${lecture.title}" needs at least one correct answer selected`);
+                  }
+                }
+              }
+              break;
+              
+            case 'article':
+              totalArticles++;
+              // Normalize article content: strip HTML tags, NBSPs and collapse whitespace
+              const rawContent = lecture.content || '';
+              const normalizedContent = rawContent.replace(/\u00A0/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+              if (!normalizedContent) {
+                throw new Error(`📄 Article "${lecture.title}" in section "${section.title}" has no content (found: ${JSON.stringify(rawContent.slice(0,80))})`);
+              }
+
+              const wordCountArticle = normalizedContent.split(/\s+/).filter(Boolean).length;
+              if (normalizedContent.length < 50 && wordCountArticle < 10) {
+                throw new Error(`📄 Article "${lecture.title}" content is too short. Please add more meaningful content (current length: ${normalizedContent.length}, words: ${wordCountArticle}).`);
+              }
+              break;
+              
+            case 'assignment':
+              totalAssignments++;
+              // Accept either legacy `assignmentDescription` or structured `assignment.instructions`
+              const rawInstructions = (lecture.assignment && (lecture.assignment.instructions || lecture.assignment.description)) || lecture.assignmentDescription || '';
+              const normalizedInstructions = String(rawInstructions).replace(/\u00A0/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+              if (!normalizedInstructions) {
+                throw new Error(`📋 Assignment "${lecture.title}" in section "${section.title}" needs instructions`);
+              }
+
+              // Require a minimum of characters or words for clarity
+              const wordCount = normalizedInstructions.split(/\s+/).filter(Boolean).length;
+              if (normalizedInstructions.length < 20 && wordCount < 3) {
+                throw new Error(`📋 Assignment "${lecture.title}" instructions are too short. Please provide clear instructions (at least 20 characters).`);
+              }
+
+              break;
+              
+            default:
+              throw new Error(`❓ Unknown lecture type "${lecture.type}" in "${lecture.title}"`);
+          }
         }
       }
+      
+      console.log('✅ Validation passed:', {
+        sections: sections.length,
+        lectures: totalLectures,
+        videos: totalVideos,
+        quizzes: totalQuizzes,
+        articles: totalArticles,
+        assignments: totalAssignments
+      });
+      
+      return null;
+    } catch (error) {
+      console.log('❌ Validation failed:', error.message);
+      return error.message;
     }
-    return null;
+  };
+
+  const diagnosticCurriculum = () => {
+    try {
+      console.group('📋 Curriculum Diagnostics');
+      if (!sections || sections.length === 0) {
+        console.warn('No sections found');
+        console.groupEnd();
+        return { sections: 0, incomplete: true };
+      }
+
+      let incompleteCount = 0;
+      sections.forEach((section, si) => {
+        console.group(`Section ${si + 1}: ${section.title || '(untitled section)'}`);
+        if (!section.title || !String(section.title).trim()) {
+          console.warn(' - MISSING: section title');
+          incompleteCount++;
+        }
+        if (!section.lectures || section.lectures.length === 0) {
+          console.warn(' - MISSING: no lectures in this section');
+          incompleteCount++;
+        } else {
+          section.lectures.forEach((lecture, li) => {
+            const lt = lecture.type || 'unknown';
+            console.group(` Lecture ${li + 1}: ${lecture.title || '(untitled)'} [${lt}]`);
+
+            // Common checks
+            if (!lecture.title || !String(lecture.title).trim()) {
+              console.warn('  - MISSING: lecture title'); incompleteCount++;
+            }
+
+            if (lt === 'video') {
+              const isUploaded = !!lecture.isUploaded || !!lecture.file;
+              console.log(`  - video uploaded: ${isUploaded}`);
+              if (!isUploaded) { console.warn('  - MISSING: video file not uploaded'); incompleteCount++; }
+            } else if (lt === 'article') {
+              const raw = lecture.content || '';
+              const norm = String(raw).replace(/\u00A0/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+              console.log(`  - article length: ${norm.length}, words: ${norm.split(/\s+/).filter(Boolean).length}`);
+              if (!norm) { console.warn('  - MISSING: article content'); incompleteCount++; }
+            } else if (lt === 'assignment') {
+              const raw = (lecture.assignment && (lecture.assignment.instructions || lecture.assignment.description)) || lecture.assignmentDescription || '';
+              const norm = String(raw).replace(/\u00A0/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+              console.log(`  - assignment instructions length: ${norm.length}, words: ${norm.split(/\s+/).filter(Boolean).length}`);
+              if (!norm) { console.warn('  - MISSING: assignment instructions'); incompleteCount++; }
+            } else if (lt === 'quiz') {
+              const quiz = quizDrafts[lecture.id] || lecture.quiz || {};
+              const qCount = (quiz.questions || []).length;
+              console.log(`  - quiz questions: ${qCount}`);
+              if (qCount === 0) { console.warn('  - MISSING: quiz questions'); incompleteCount++; }
+            }
+
+            console.groupEnd();
+          });
+        }
+        console.groupEnd();
+      });
+
+      console.log(`✅ Sections: ${sections.length}, incomplete items: ${incompleteCount}`);
+      console.groupEnd();
+      return { sections: sections.length, incomplete: incompleteCount > 0 };
+    } catch (err) {
+      console.error('Diagnostics error', err);
+      return { sections: sections.length || 0, incomplete: true };
+    }
   };
 
   const handleCourseUpload = async (e) => {
+    console.log('🚀 handleCourseUpload called');
     e.preventDefault();
-    
+
+    // Emit diagnostics for each section/lecture to help debug missing fields
+    const diag = diagnosticCurriculum();
+    console.log('📊 Curriculum diagnostic result:', diag);
+
     const validationError = validateForm();
     if (validationError) {
+      console.log('❌ Validation error:', validationError);
       setError(validationError);
+      // Show validation error in modal so user sees details and can dismiss
+      setModalData({
+        type: 'error',
+        title: 'Validation Failed',
+        message: validationError
+      });
+      setShowModal(true);
       return;
     }
 
+    console.log('✅ Validation passed, starting upload...');
     setLoading(true);
     setError(null);
 
@@ -1364,7 +1572,7 @@ const CourseUpload = () => {
 
       const courseId = courseResponse.data.course?._id || courseResponse.data._id;
 
-      // Step 2: Save curriculum (sections and lectures)
+      // Step 2: Save curriculum (sections and lectures) with full quiz, article, assignment data
       const curriculumData = {
         courseId,
         courseName: courseForm.title,
@@ -1373,19 +1581,87 @@ const CourseUpload = () => {
           order: sIndex + 1,
           title: section.title,
           description: section.description || '',
-          lectures: section.lectures.map((lecture, lIndex) => ({
-            order: lIndex + 1,
-            title: lecture.title,
-            type: lecture.type,
-            duration: lecture.duration,
-            videoUrl: lecture.file,
-            fileName: lecture.fileName,
-            fileSize: lecture.fileSize,
-            content: lecture.content || '',
-            resources: lecture.resources || []
-          }))
+          lectures: section.lectures.map((lecture, lIndex) => {
+            // Base lecture data
+            const lectureData = {
+              order: lIndex + 1,
+              title: lecture.title,
+              type: lecture.type,
+              duration: lecture.duration,
+              resources: lecture.resources || []
+            };
+
+            // Add type-specific data
+            if (lecture.type === 'video') {
+              // Video data
+              lectureData.videoUrl = lecture.file;
+              lectureData.fileName = lecture.fileName;
+              lectureData.fileSize = lecture.fileSize;
+              lectureData.isUploaded = lecture.isUploaded;
+            } else if (lecture.type === 'quiz') {
+              // Quiz data - get from quizDrafts or lecture.quiz
+              const quizData = quizDrafts[lecture.id] || lecture.quiz || {};
+              lectureData.quiz = {
+                title: quizData.title || lecture.title,
+                description: quizData.description || '',
+                questions: (quizData.questions || []).map((q, qi) => ({
+                  question: q.question || '',
+                  type: q.type || 'single_correct',
+                  choices: q.choices || [],
+                  correctIndex: q.correctIndex,
+                  correctIndices: q.correctIndices || [],
+                  marks: q.marks || 1,
+                  sampleAnswer: q.sampleAnswer || '',
+                  explanation: q.explanation || ''
+                })),
+                passingScore: quizData.passingScore || 60,
+                timeLimitMinutes: quizData.timeLimitMinutes || 30,
+                attemptsAllowed: quizData.attemptsAllowed === 'unlimited' ? -1 : (parseInt(quizData.attemptsAllowed) || 3),
+                tokenReward: quizData.tokenReward || 10,
+                shuffleQuestions: quizData.shuffleQuestions || false,
+                showCorrectAnswers: quizData.showCorrectAnswers !== false
+              };
+              console.log(`📝 Quiz data for "${lecture.title}":`, lectureData.quiz);
+            } else if (lecture.type === 'article') {
+              // Article data
+              lectureData.article = {
+                content: lecture.content || '',
+                articleTitle: lecture.articleTitle || lecture.title,
+                readingTime: lecture.readingTime || 5,
+                resourceLinks: lecture.resourceLinks || []
+              };
+              lectureData.content = lecture.content || ''; // Keep for backward compatibility
+              lectureData.readingTime = lecture.readingTime || 5;
+              console.log(`📄 Article data for "${lecture.title}":`, {
+                contentLength: (lecture.content || '').length,
+                readingTime: lecture.readingTime
+              });
+            } else if (lecture.type === 'assignment') {
+              // Assignment data - prefer structured `lecture.assignment` fields, fallback to legacy `assignmentDescription`
+              const instr = (lecture.assignment && (lecture.assignment.instructions || lecture.assignment.description)) || lecture.assignmentDescription || '';
+              const desc = (lecture.assignment && lecture.assignment.description) || lecture.assignmentDescription || '';
+              lectureData.assignment = {
+                description: desc,
+                instructions: instr,
+                submissionType: (lecture.assignment && lecture.assignment.submissionType) || lecture.submissionType || 'file_upload',
+                evaluationType: (lecture.assignment && lecture.assignment.evaluationType) || lecture.evaluationType || 'manual',
+                tokenReward: (lecture.assignment && lecture.assignment.tokenReward) || lecture.tokenReward || 0,
+                deadline: (lecture.assignment && lecture.assignment.deadline) || lecture.deadline || null,
+                allowedFileTypes: (lecture.assignment && lecture.assignment.allowedFileTypes) || lecture.allowedFileTypes || [],
+                minWords: (lecture.assignment && lecture.assignment.minWords) || lecture.minWords || 0,
+                maxWords: (lecture.assignment && lecture.assignment.maxWords) || lecture.maxWords || 0,
+                linkInstructions: (lecture.assignment && lecture.assignment.linkInstructions) || lecture.linkInstructions || '',
+                maxScore: (lecture.assignment && lecture.assignment.maxScore) || lecture.maxScore || 100
+              };
+              console.log(`📋 Assignment data for "${lecture.title}":`, lectureData.assignment);
+            }
+
+            return lectureData;
+          })
         }))
       };
+
+      console.log('🚀 Sending curriculum data:', JSON.stringify(curriculumData, null, 2));
 
       await api.post('/courses/save-curriculum', curriculumData, {
         headers: {
@@ -1396,13 +1672,48 @@ const CourseUpload = () => {
       setSuccess(true);
       setError(null);
       
+      // Show success modal
+      setModalData({
+        type: 'success',
+        title: '🎉 Success!',
+        message: `Course ${isEditMode ? 'updated' : 'published'} successfully! You will be redirected to your dashboard.`
+      });
+      setShowModal(true);
+      
       setTimeout(() => {
         navigate('/mentor-home');
-      }, 2000);
+      }, 3000);
 
     } catch (err) {
-      console.error('Course upload/update error:', err);
-      setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'upload'} course. Please try again.`);
+      console.error('💥 Course upload/update error:', err);
+      
+      let errorMessage = 'An unexpected error occurred';
+      
+      if (err.response?.data?.message) {
+        // Server validation error
+        errorMessage = err.response.data.message;
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Invalid data provided. Please check your course content.';
+      } else if (err.response?.status === 401) {
+        errorMessage = 'You are not authorized. Please log in again.';
+      } else if (err.response?.status === 413) {
+        errorMessage = 'File size too large. Please use smaller files.';
+      } else if (err.response?.status >= 500) {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      // Show error modal
+      setModalData({
+        type: 'error',
+        title: '❌ Upload Failed',
+        message: errorMessage
+      });
+      setShowModal(true);
+      
+      // Also set error for inline display as fallback
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1410,11 +1721,18 @@ const CourseUpload = () => {
 
     // Form submit handler for the multi-stage wizard
     const handleSubmit = (e) => {
+      console.log('🎯 handleSubmit called');
+      console.log('📊 Current stage:', currentStage);
+      console.log('📊 Stages length:', stages.length);
+      console.log('✅ Agreed to terms:', agreedToTerms);
+      console.log('🔄 Loading state:', loading);
+      
       // If called from a button click (no event) allow direct navigation
       if (e && e.preventDefault) e.preventDefault();
 
       // If not on final stage, try to advance (will validate current stage)
       if (currentStage < stages.length) {
+        console.log('⏩ Moving to next stage...');
         if (canMoveToNextStage()) {
           nextStage();
           setError(null);
@@ -1424,12 +1742,16 @@ const CourseUpload = () => {
         return;
       }
 
+      console.log('🚀 On final stage, checking terms agreement...');
+      
       // Final stage: ensure agreement then perform course upload
       if (!agreedToTerms) {
-        setError('You must agree to the terms before publishing the course.');
+        console.log('❌ Terms not agreed');
+        setError('⚠️ Please check the "I agree to the Terms of Service and Privacy Policy" checkbox below before publishing your course.');
         return;
       }
 
+      console.log('✅ All checks passed, calling handleCourseUpload...');
       // Call existing upload handler
       handleCourseUpload(e);
     };
@@ -2274,6 +2596,13 @@ const CourseUpload = () => {
                                       placeholder="Provide clear instructions for this assignment..."
                                       rows={3}
                                     />
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                                      <button type="button" className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm" onClick={() => {
+                                        console.log('💾 Save Assignment (CourseUpload) clicked', { sectionId: section.id, lectureId: lecture.id });
+                                        saveLectureDetails(section.id, lecture.id, { assignment: { ...lecture.assignment } });
+                                      }}>💾 Save</button>
+                                      <span style={{ color: '#9ca3af', fontSize: 12, alignSelf: 'center' }}>Save assignment instructions</span>
+                                    </div>
                                   </div>
                                 </AssignmentSettings>
                               </AssignmentSection>
@@ -2339,6 +2668,13 @@ const CourseUpload = () => {
                                       placeholder="Write your article content here... Supports Markdown formatting."
                                       rows={6}
                                     />
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                                      <button type="button" className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm" onClick={() => {
+                                        console.log('💾 Save Article (CourseUpload) clicked', { sectionId: section.id, lectureId: lecture.id });
+                                        saveLectureDetails(section.id, lecture.id, { article: { ...lecture.article }, content: lecture.article?.content, readingTime: lecture.readingTime, resourceLinks: lecture.article?.resources });
+                                      }}>💾 Save</button>
+                                      <span style={{ color: '#9ca3af', fontSize: 12, alignSelf: 'center' }}>Save article content</span>
+                                    </div>
                                   </div>
                                   
                                   <div className="mb-4">
@@ -2439,6 +2775,44 @@ const CourseUpload = () => {
             {currentStage === 5 && renderStage5()}
           </StageContent>
 
+          {/* Error Display */}
+          {error && (
+            <div style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginTop: '20px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '18px' }}>⚠️</span>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Success Display */}
+          {success && (
+            <div style={{
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              color: '#15803d',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginTop: '20px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '18px' }}>✅</span>
+              <span>Course {isEditMode ? 'updated' : 'published'} successfully! Redirecting...</span>
+            </div>
+          )}
+
           {/* Navigation */}
           <StageNavigation>
             <NavButton
@@ -2468,9 +2842,15 @@ const CourseUpload = () => {
                 </NavButton>
               ) : (
                 <NavButton
-                  type="submit"
+                  type="button"
                   primary
                   disabled={!agreedToTerms || loading}
+                  onClick={(e) => {
+                    console.log('🔘 Publish button clicked');
+                    console.log('📊 Current stage:', currentStage);
+                    console.log('✅ Agreed to terms:', agreedToTerms);
+                    handleSubmit(e);
+                  }}
                 >
                   {loading ? (
                     <>
@@ -2489,6 +2869,97 @@ const CourseUpload = () => {
           </StageNavigation>
         </form>
       </WizardContainer>
+      
+      {/* Success/Error Modal */}
+      {showModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            textAlign: 'center',
+            animation: 'modalSlideIn 0.3s ease-out'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '16px'
+            }}>
+              {modalData.type === 'success' ? '🎉' : '❌'}
+            </div>
+            
+            <h2 style={{
+              color: modalData.type === 'success' ? '#059669' : '#dc2626',
+              fontSize: '24px',
+              fontWeight: '600',
+              marginBottom: '16px',
+              margin: 0
+            }}>
+              {modalData.title}
+            </h2>
+            
+            <p style={{
+              color: '#374151',
+              fontSize: '16px',
+              lineHeight: '1.6',
+              marginBottom: '24px',
+              whiteSpace: 'pre-line'
+            }}>
+              {modalData.message}
+            </p>
+            
+            <button
+              onClick={() => setShowModal(false)}
+              style={{
+                backgroundColor: modalData.type === 'success' ? '#059669' : '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px 24px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.backgroundColor = modalData.type === 'success' ? '#047857' : '#b91c1c';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.backgroundColor = modalData.type === 'success' ? '#059669' : '#dc2626';
+              }}
+            >
+              {modalData.type === 'success' ? 'Great!' : 'Got it'}
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <style>{`
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+      `}</style>
     </div>
   );
 };

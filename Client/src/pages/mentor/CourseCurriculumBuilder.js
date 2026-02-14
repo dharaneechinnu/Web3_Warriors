@@ -866,9 +866,45 @@ const CourseCurriculumBuilder = () => {
           alert(`Please fill in all lecture titles in section "${section.title}"`);
           return;
         }
+        
+        // Type-specific validation
         if (lecture.type === 'video' && !lecture.isUploaded) {
           alert(`Please upload video for "${lecture.title}" in section "${section.title}"`);
           return;
+        }
+        
+        if (lecture.type === 'quiz') {
+          const quizData = quizDrafts[lecture.id] || lecture.quiz;
+          if (!quizData || !quizData.questions || quizData.questions.length === 0) {
+            alert(`Please add at least one question to quiz "${lecture.title}" in section "${section.title}"`);
+            return;
+          }
+          // Check each question has content
+          for (let i = 0; i < quizData.questions.length; i++) {
+            const q = quizData.questions[i];
+            if (!q.question || !q.question.trim()) {
+              alert(`Question ${i + 1} in quiz "${lecture.title}" is empty. Please add question text.`);
+              return;
+            }
+            if ((q.type === 'single_correct' || q.type === 'multiple_correct') && (!q.choices || q.choices.filter(c => c && c.trim()).length < 2)) {
+              alert(`Question ${i + 1} in quiz "${lecture.title}" needs at least 2 answer options.`);
+              return;
+            }
+          }
+        }
+        
+        if (lecture.type === 'article') {
+          if (!lecture.content || !lecture.content.trim()) {
+            alert(`Please add content to article "${lecture.title}" in section "${section.title}"`);
+            return;
+          }
+        }
+        
+        if (lecture.type === 'assignment') {
+          if (!lecture.assignmentDescription || !lecture.assignmentDescription.trim()) {
+            alert(`Please add instructions to assignment "${lecture.title}" in section "${section.title}"`);
+            return;
+          }
         }
       }
     }
@@ -885,20 +921,85 @@ const CourseCurriculumBuilder = () => {
           order: sIndex + 1,
           title: section.title,
           description: section.description || '',
-          lectures: section.lectures.map((lecture, lIndex) => ({
-            order: lIndex + 1,
-            title: lecture.title,
-            type: lecture.type,
-            duration: lecture.duration,
-            videoUrl: lecture.file,
-            fileName: lecture.fileName,
-            fileSize: lecture.fileSize,
-            content: lecture.content || '',
-            resources: lecture.resources || []
-          }))
+          lectures: section.lectures.map((lecture, lIndex) => {
+            // Base lecture data
+            const lectureData = {
+              order: lIndex + 1,
+              title: lecture.title,
+              type: lecture.type,
+              duration: lecture.duration,
+              resources: lecture.resources || []
+            };
+
+            // Add type-specific data
+            if (lecture.type === 'video') {
+              // Video data
+              lectureData.videoUrl = lecture.file;
+              lectureData.fileName = lecture.fileName;
+              lectureData.fileSize = lecture.fileSize;
+              lectureData.isUploaded = lecture.isUploaded;
+            } else if (lecture.type === 'quiz') {
+              // Quiz data - get from quizDrafts or lecture.quiz
+              const quizData = quizDrafts[lecture.id] || lecture.quiz || {};
+              lectureData.quiz = {
+                title: quizData.title || lecture.title,
+                description: quizData.description || '',
+                questions: (quizData.questions || []).map((q, qi) => ({
+                  question: q.question || '',
+                  type: q.type || 'single_correct',
+                  choices: q.choices || [],
+                  correctIndex: q.correctIndex,
+                  correctIndices: q.correctIndices || [],
+                  marks: q.marks || 1,
+                  sampleAnswer: q.sampleAnswer || '',
+                  explanation: q.explanation || ''
+                })),
+                passingScore: quizData.passingScore || 60,
+                timeLimitMinutes: quizData.timeLimitMinutes || 30,
+                attemptsAllowed: quizData.attemptsAllowed === 'unlimited' ? -1 : (parseInt(quizData.attemptsAllowed) || 3),
+                tokenReward: quizData.tokenReward || 10,
+                shuffleQuestions: quizData.shuffleQuestions || false,
+                showCorrectAnswers: quizData.showCorrectAnswers !== false
+              };
+              console.log(`📝 Quiz data for "${lecture.title}":`, lectureData.quiz);
+            } else if (lecture.type === 'article') {
+              // Article data
+              lectureData.article = {
+                content: lecture.content || '',
+                articleTitle: lecture.articleTitle || lecture.title,
+                readingTime: lecture.readingTime || 5,
+                resourceLinks: lecture.resourceLinks || []
+              };
+              lectureData.content = lecture.content || ''; // Keep for backward compatibility
+              lectureData.readingTime = lecture.readingTime || 5;
+              console.log(`📄 Article data for "${lecture.title}":`, {
+                contentLength: (lecture.content || '').length,
+                readingTime: lecture.readingTime
+              });
+            } else if (lecture.type === 'assignment') {
+              // Assignment data
+              lectureData.assignment = {
+                description: lecture.assignmentDescription || '',
+                instructions: lecture.assignmentDescription || '', // Using same field for now
+                submissionType: lecture.submissionType || 'file_upload',
+                evaluationType: lecture.evaluationType || 'manual',
+                tokenReward: lecture.tokenReward || 0,
+                deadline: lecture.deadline || null,
+                allowedFileTypes: lecture.allowedFileTypes || [],
+                minWords: lecture.minWords || 0,
+                maxWords: lecture.maxWords || 0,
+                linkInstructions: lecture.linkInstructions || '',
+                maxScore: 100
+              };
+              console.log(`📋 Assignment data for "${lecture.title}":`, lectureData.assignment);
+            }
+
+            return lectureData;
+          })
         }))
       };
 
+      console.log('🚀 Sending curriculum data:', JSON.stringify(curriculumData, null, 2));
       setOverallProgress(50);
 
       const response = await api.post('/courses/save-curriculum', curriculumData, {

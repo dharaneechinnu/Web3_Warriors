@@ -14,10 +14,14 @@ import {
   FaFileAlt,
   FaUpload,
   FaDownload,
-  FaEye
+  FaEye,
+  FaClock,
+  FaPlayCircle
 } from 'react-icons/fa';
 import api from '../../services/api';
 import LectureVideoPlayer from '../../components/LectureVideoPlayer';
+
+
 
 const LearnerContainer = styled.div`
   min-height: 100vh;
@@ -129,18 +133,18 @@ const TimeDisplay = styled.span`
 
 const MainContent = styled.div`
   display: grid;
-  grid-template-columns: 400px 1fr 350px;
+  grid-template-columns: 400px 1fr;
   gap: 2rem;
   padding: 2rem;
   min-height: calc(100vh - 4rem);
   
   @media (max-width: 1400px) {
-    grid-template-columns: 350px 1fr 300px;
+    grid-template-columns: 350px 1fr;
     gap: 1.5rem;
   }
   
   @media (max-width: 1200px) {
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: 1fr;
     gap: 1rem;
   }
   
@@ -575,6 +579,70 @@ const VideoBottomContent = styled.div`
   transition: transform 0.3s ease;
 `;
 
+const ResumeIndicator = styled.div`
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(20, 184, 166, 0.1));
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #10b981;
+  animation: resumePulse 2s infinite;
+  
+  @keyframes resumePulse {
+    0%, 100% { 
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+    }
+  }
+`;
+
+const ResumeText = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+  
+  .resume-icon {
+    font-size: 1.25rem;
+    color: #10b981;
+  }
+  
+  .resume-message {
+    font-size: 1rem;
+    
+    .resume-time {
+      font-weight: 700;
+      color: #059669;
+    }
+  }
+`;
+
+const ResumeButton = styled.button`
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  &:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+`;
+
 const NextContentInfo = styled.div`
   display: flex;
   justify-content: space-between;
@@ -633,102 +701,441 @@ const CompletionMessage = styled.div`
 `;
 
 // Quiz Component
-const QuizContent = ({ quiz, onSubmit, result }) => {
-  const [answers, setAnswers] = useState({});
-  const [submitted, setSubmitted] = useState(false);
+const QuizContent = ({ quiz, onSubmit, result, currentAttempts = 0, onRetry }) => {
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(null);
 
-  const handleAnswerChange = (questionId, answer) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+  // Initialize timer if quiz has time limit
+  useEffect(() => {
+    if (quiz.timeLimitMinutes && quiz.timeLimitMinutes > 0) {
+      setTimeRemaining(quiz.timeLimitMinutes * 60); // Convert to seconds
+    }
+  }, [quiz]);
+
+  // Timer countdown
+  useEffect(() => {
+    if (timeRemaining > 0 && !isSubmitted) {
+      const timer = setTimeout(() => {
+        setTimeRemaining(timeRemaining - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (timeRemaining === 0 && !isSubmitted) {
+      // Time's up - auto submit
+      handleSubmit();
+    }
+  }, [timeRemaining, isSubmitted]);
+
+  const handleAnswerSelect = (questionId, answer) => {
+    if (isSubmitted) return;
+    setSelectedAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
   };
 
-  const handleSubmit = async () => {
-    const result = await onSubmit(answers);
-    setSubmitted(true);
+  const handleSubmit = () => {
+    if (isSubmitted) return;
+    
+    // Convert answers to expected format
+    const formattedAnswers = quiz.questions.map((question, index) => ({
+      questionId: question._id,
+      questionIndex: index,
+      selectedIndex: question.type === 'single_correct' ? 
+        (question.choices ? question.choices.indexOf(selectedAnswers[question._id]) : -1) : undefined,
+      selectedIndices: question.type === 'multiple_correct' ? 
+        (selectedAnswers[question._id] || []).map(ans => question.choices.indexOf(ans)) : undefined,
+      textAnswer: question.type === 'short_answer' ? selectedAnswers[question._id] : undefined
+    }));
+    
+    console.log('Formatted answers for submission:', formattedAnswers);
+    setIsSubmitted(true);
+    onSubmit(formattedAnswers);
   };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isAnswered = (questionId) => {
+    return selectedAnswers[questionId] !== undefined && selectedAnswers[questionId] !== null && selectedAnswers[questionId] !== '';
+  };
+
+  const allQuestionsAnswered = () => {
+    return quiz.questions.every(q => isAnswered(q._id));
+  };
+
+  if (quiz.error) {
+    return (
+      <div style={{ 
+        padding: '20px', 
+        backgroundColor: '#fef2f2', 
+        border: '1px solid #fecaca', 
+        borderRadius: '8px',
+        color: '#dc2626',
+        textAlign: 'center'
+      }}>
+        <p>❌ {quiz.message}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{
+            marginTop: '10px',
+            padding: '8px 16px',
+            backgroundColor: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   if (result) {
+    const maxAttempts = result.maxAttempts || quiz.attemptsAllowed || 3;
+    const attemptsUsed = result.attemptsUsed || result.attemptNumber || 1;
+    const hasAttemptsLeft = result.hasAttemptsLeft !== undefined ? result.hasAttemptsLeft : attemptsUsed < maxAttempts;
+    
     return (
-      <div>
-        <div style={{
-          background: result.passed ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-          border: `1px solid ${result.passed ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-          borderRadius: '8px',
-          padding: '1rem',
-          marginBottom: '1rem'
-        }}>
-          <h4 style={{ margin: 0, color: result.passed ? '#22c55e' : '#ef4444' }}>
-            {result.passed ? '✅ Quiz Passed!' : '❌ Quiz Failed'}
-          </h4>
-          <p>Score: {result.score}/{result.totalQuestions}</p>
-          <p>Percentage: {Math.round((result.score / result.totalQuestions) * 100)}%</p>
-          {result.feedback && <p>{result.feedback}</p>}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        padding: '2rem',
+        borderRadius: '1rem',
+        textAlign: 'center',
+        marginBottom: '2rem'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <div style={{ 
+            fontSize: '48px', 
+            marginBottom: '10px' 
+          }}>
+            {result.passed ? '🎉' : result.autoCompleted ? '📝' : '😔'}
+          </div>
+          <h3 style={{ 
+            color: result.passed ? '#059669' : result.autoCompleted ? '#f59e0b' : '#dc2626',
+            marginBottom: '10px'
+          }}>
+            {result.passed ? 'Congratulations!' : result.autoCompleted ? 'Quiz Completed' : 'Keep Learning!'}
+          </h3>
+          <p>{result.message}</p>
+          
+          {/* Attempt Information */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '10px',
+            borderRadius: '8px',
+            marginTop: '15px',
+            fontSize: '14px'
+          }}>
+            📊 Attempt {attemptsUsed} of {maxAttempts === -1 ? '∞' : maxAttempts}
+            {result.autoCompleted && (
+              <div style={{ marginTop: '5px', color: '#fbbf24' }}>
+                ⚠️ All attempts used - Quiz marked as complete
+              </div>
+            )}
+          </div>
         </div>
+        
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr 1fr', 
+          gap: '15px',
+          marginBottom: '20px' 
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>
+              {result.earnedMarks}/{result.totalMarks}
+            </div>
+            <div style={{ color: '#e5e7eb', fontSize: '14px' }}>Score</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>
+              {result.percentage}%
+            </div>
+            <div style={{ color: '#e5e7eb', fontSize: '14px' }}>Percentage</div>
+          </div>
+        </div>
+        
+        {result.tokenReward > 0 && (
+          <div style={{ 
+            textAlign: 'center', 
+            backgroundColor: 'rgba(254, 243, 199, 0.2)',
+            padding: '10px',
+            borderRadius: '8px',
+            marginBottom: '20px'
+          }}>
+            🪙 You earned {result.tokenReward} tokens!
+          </div>
+        )}
+        
+        {/* Retry Button */}
+        {!result.passed && hasAttemptsLeft && !result.autoCompleted && (
+          <div style={{ marginBottom: '20px' }}>
+            <button
+              onClick={() => {
+                if (onRetry) {
+                  onRetry(); // Clear the result to show quiz form again
+                }
+              }}
+              style={{
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px 24px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              🔄 Try Again ({maxAttempts - attemptsUsed} attempts left)
+            </button>
+          </div>
+        )}
+        
+        {result.results && (
+          <div style={{ textAlign: 'left', marginTop: '20px' }}>
+            <h4>Question Review:</h4>
+            {result.results.map((questionResult, index) => (
+              <div key={index} style={{
+                marginBottom: '15px',
+                padding: '15px',
+                backgroundColor: questionResult.isCorrect ? 
+                  'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                border: `1px solid ${questionResult.isCorrect ? 
+                  'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                borderRadius: '8px'
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                  Q{index + 1}: {questionResult.question}
+                </div>
+                <div style={{ marginBottom: '5px' }}>
+                  Your answer: {JSON.stringify(questionResult.yourAnswer?.selectedIndex !== undefined ? 
+                    quiz.questions[index]?.choices?.[questionResult.yourAnswer.selectedIndex] : 
+                    questionResult.yourAnswer?.textAnswer || 'Not answered')}
+                </div>
+                {questionResult.correctAnswer && (
+                  <div style={{ color: '#059669' }}>
+                    Correct answer: {JSON.stringify(questionResult.correctAnswer)}
+                  </div>
+                )}
+                {questionResult.explanation && (
+                  <div style={{ marginTop: '8px', fontStyle: 'italic', color: '#e5e7eb' }}>
+                    💡 {questionResult.explanation}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <strong>Instructions:</strong> {quiz.instructions || 'Answer all questions and click submit.'}
-      </div>
-      
-      {quiz.questions?.map((question, index) => (
-        <div key={question._id || index} style={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '8px',
-          padding: '1rem',
-          marginBottom: '1rem'
-        }}>
-          <h4 style={{ marginTop: 0 }}>{index + 1}. {question.question}</h4>
-          
-          {question.type === 'multiple-choice' && (
-            <div>
-              {question.options?.map((option, optionIndex) => (
-                <label key={optionIndex} style={{ display: 'block', margin: '0.5rem 0', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name={`question-${question._id || index}`}
-                    value={option}
-                    onChange={() => handleAnswerChange(question._id || index, option)}
-                    style={{ marginRight: '0.5rem' }}
-                    disabled={submitted}
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-          )}
-          
-          {question.type === 'text' && (
-            <textarea
-              value={answers[question._id || index] || ''}
-              onChange={(e) => handleAnswerChange(question._id || index, e.target.value)}
-              placeholder="Enter your answer..."
-              disabled={submitted}
-              style={{
-                width: '100%',
-                minHeight: '100px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '4px',
-                color: 'white',
-                padding: '0.5rem',
-                marginTop: '0.5rem'
-              }}
-            />
+      {/* Quiz Header */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '20px',
+        padding: '15px',
+        backgroundColor: 'rgba(124, 58, 237, 0.1)',
+        borderRadius: '8px',
+        border: '1px solid rgba(124, 58, 237, 0.3)'
+      }}>
+        <div>
+          <h3 style={{ margin: 0, marginBottom: '5px' }}>{quiz.title || 'Quiz'}</h3>
+          {quiz.description && (
+            <p style={{ margin: 0, color: '#9ca3af', fontSize: '14px' }}>{quiz.description}</p>
           )}
         </div>
-      ))}
-      
-      <ActionButton 
-        variant="primary"
-        onClick={handleSubmit}
-        disabled={submitted || !quiz.questions?.every(q => answers[q._id] || answers[quiz.questions.indexOf(q)])}
-      >
-        {submitted ? 'Submitting...' : 'Submit Quiz'}
-      </ActionButton>
+        {timeRemaining !== null && (
+          <div style={{
+            padding: '8px 12px',
+            backgroundColor: timeRemaining < 300 ? '#fef2f2' : 'rgba(59, 130, 246, 0.1)',
+            color: timeRemaining < 300 ? '#dc2626' : '#3b82f6',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+            border: `1px solid ${timeRemaining < 300 ? '#fecaca' : 'rgba(59, 130, 246, 0.3)'}`
+          }}>
+            ⏰ {formatTime(timeRemaining)}
+          </div>
+        )}
+      </div>
+
+      {/* Quiz Info */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '20px', 
+        marginBottom: '25px',
+        flexWrap: 'wrap',
+        color: '#9ca3af',
+        fontSize: '14px'
+      }}>
+        <div>📝 {quiz.questions.length} Questions</div>
+        <div>🎯 {quiz.passingScore || 70}% to Pass</div>
+        {quiz.tokenReward > 0 && <div>🪙 {quiz.tokenReward} Tokens</div>}
+        <div>🔄 Max Attempts: {quiz.attemptsAllowed === -1 ? 'Unlimited' : (quiz.attemptsAllowed || 3)}</div>
+        {currentAttempts > 0 && (
+          <div style={{ color: '#f59e0b', fontWeight: 'bold' }}>
+            📊 Attempt {currentAttempts + 1} of {quiz.attemptsAllowed === -1 ? '∞' : (quiz.attemptsAllowed || 3)}
+          </div>
+        )}
+      </div>
+
+      {/* Questions */}
+      <div style={{ marginBottom: '30px' }}>
+        {quiz.questions.map((question, qIndex) => (
+          <div key={question._id || qIndex} style={{
+            marginBottom: '25px',
+            padding: '20px',
+            border: '2px solid rgba(124, 58, 237, 0.3)',
+            borderRadius: '12px',
+            backgroundColor: isAnswered(question._id) ? 
+              'rgba(34, 197, 94, 0.05)' : 'rgba(255, 255, 255, 0.02)'
+          }}>
+            <div style={{ 
+              fontWeight: 'bold', 
+              marginBottom: '15px',
+              fontSize: '16px'
+            }}>
+              Q{qIndex + 1}: {question.question}
+              {question.marks && question.marks > 1 && (
+                <span style={{ 
+                  marginLeft: '10px', 
+                  fontSize: '12px', 
+                  color: '#9ca3af' 
+                }}>
+                  ({question.marks} marks)
+                </span>
+              )}
+            </div>
+            
+            {(question.type === 'single_correct' || question.type === 'multiple-choice') && (
+              <div>
+                {question.choices?.map((choice, cIndex) => (
+                  <label key={cIndex} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '10px',
+                    padding: '12px',
+                    backgroundColor: selectedAnswers[question._id] === choice ? 
+                      'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <input
+                      type="radio"
+                      name={`question-${question._id}`}
+                      value={choice}
+                      checked={selectedAnswers[question._id] === choice}
+                      onChange={() => handleAnswerSelect(question._id, choice)}
+                      disabled={isSubmitted}
+                      style={{ marginRight: '12px' }}
+                    />
+                    <span>{choice}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            
+            {question.type === 'multiple_correct' && (
+              <div>
+                <div style={{ marginBottom: '10px', fontSize: '14px', color: '#9ca3af' }}>
+                  Select all correct answers:
+                </div>
+                {question.choices?.map((choice, cIndex) => {
+                  const currentAnswers = selectedAnswers[question._id] || [];
+                  return (
+                    <label key={cIndex} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      padding: '12px',
+                      backgroundColor: currentAnswers.includes(choice) ? 
+                        'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={currentAnswers.includes(choice)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            handleAnswerSelect(question._id, [...currentAnswers, choice]);
+                          } else {
+                            handleAnswerSelect(question._id, currentAnswers.filter(a => a !== choice));
+                          }
+                        }}
+                        disabled={isSubmitted}
+                        style={{ marginRight: '12px' }}
+                      />
+                      <span>{choice}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            
+            {question.type === 'short_answer' && (
+              <textarea
+                placeholder="Enter your answer here..."
+                value={selectedAnswers[question._id] || ''}
+                onChange={(e) => handleAnswerSelect(question._id, e.target.value)}
+                disabled={isSubmitted}
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  resize: 'vertical',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: 'white'
+                }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Submit Button */}
+      <div style={{ textAlign: 'center' }}>
+        <ActionButton
+          variant="primary"
+          onClick={handleSubmit}
+          disabled={isSubmitted || !allQuestionsAnswered()}
+          style={{
+            padding: '15px 30px',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            opacity: isSubmitted || !allQuestionsAnswered() ? 0.5 : 1,
+            cursor: isSubmitted || !allQuestionsAnswered() ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {isSubmitted ? '✓ Submitted' : 'Submit Quiz'}
+        </ActionButton>
+        
+        <div style={{ marginTop: '10px', fontSize: '14px', color: '#9ca3af' }}>
+          {allQuestionsAnswered() ? 
+            '✓ All questions answered' : 
+            `${Object.keys(selectedAnswers).length}/${quiz.questions.length} questions answered`
+          }
+        </div>
+      </div>
     </div>
   );
 };
@@ -743,21 +1150,101 @@ const LearnerCourseView = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [videoWatchedPercentage, setVideoWatchedPercentage] = useState(0);
+  const [hasVideoStarted, setHasVideoStarted] = useState(false);
+  const [videoCompleteThreshold] = useState(0.9); // 90% completion threshold
+  const [lastWatchedPosition, setLastWatchedPosition] = useState(0);
   const [userProgress, setUserProgress] = useState({ lectureProgress: [] });
   const [assignments, setAssignments] = useState({});
   const [quizzes, setQuizzes] = useState({});
   const [articles, setArticles] = useState({});
   const [quizResults, setQuizResults] = useState({});
+  const [quizAttempts, setQuizAttempts] = useState({}); // Track attempts per quiz
   const [overallCourseProgress, setOverallCourseProgress] = useState(0);
   const [currentLectureCompleted, setCurrentLectureCompleted] = useState(false);
   const [nextContent, setNextContent] = useState(null);
+  const [autoResumeActive, setAutoResumeActive] = useState(false);
+  const [lastSaveTime, setLastSaveTime] = useState(0); // Track last time progress was saved
+  const [isLoadingLecture, setIsLoadingLecture] = useState(false); // Loading state for lecture switching
+  const saveIntervalRef = React.useRef(null); // Ref for periodic save interval
+
+  // Helper function to format time for resume indicator
+  const formatTime = (seconds) => {
+    if (!seconds || seconds < 0) return '0:00';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+  };
 
   useEffect(() => {
     if (courseId) {
+      // fetchCourseData now handles both course loading and position selection
       fetchCourseData();
       fetchUserProgress();
+      // retryFailedSaves removed when progress tracking was disabled
     }
   }, [courseId]);
+
+  // Save progress when user leaves the page
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Save progress before leaving
+      if (currentLecture && lastWatchedPosition > 0 && !currentLectureCompleted) {
+        const userId = localStorage.getItem('userId');
+        if (userId) {
+          // Use navigator.sendBeacon for reliable delivery on page unload
+          const data = JSON.stringify({
+            learnerId: userId,
+            courseId: courseId,
+            lectureId: currentLecture._id,
+            sectionId: currentLecture.sectionId || null,
+            currentTime: Math.round(lastWatchedPosition),
+            videoProgress: Math.round(videoWatchedPercentage),
+            completed: false,
+            contentType: 'video'
+          });
+          
+          navigator.sendBeacon(
+            `http://localhost:3500/courses/updateLectureProgress`,
+            new Blob([data], { type: 'application/json' })
+          );
+          console.log('🚀 CLIENT: Progress saved via beacon on page unload');
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also save on component unmount
+      if (currentLecture && lastWatchedPosition > 0 && !currentLectureCompleted) {
+        saveVideoProgress(currentLecture._id, lastWatchedPosition, videoWatchedPercentage, false);
+      }
+    };
+  }, [currentLecture, lastWatchedPosition, videoWatchedPercentage, currentLectureCompleted, courseId]);
+
+  // Add debugging useEffect to track state changes
+  useEffect(() => {
+    if (currentLecture) {
+      console.log('🔍 CLIENT STATE DEBUG:', {
+        currentLecture: currentLecture.title,
+        lectureType: currentLecture.type,
+        lastWatchedPosition,
+        videoWatchedPercentage,
+        currentLectureCompleted,
+        hasVideoStarted,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [currentLecture, lastWatchedPosition, videoWatchedPercentage, currentLectureCompleted, hasVideoStarted]);
 
   useEffect(() => {
     // Update next content when current lecture changes
@@ -766,163 +1253,213 @@ const LearnerCourseView = () => {
     }
   }, [currentLecture, sections]);
 
+  // Ensure we fetch quiz/article/assignment content when a lecture becomes current
   useEffect(() => {
-    // When user progress loads, find and select first incomplete lecture
-    if (sections.length > 0 && userProgress.lectureProgress && !currentLecture) {
-      const findFirstIncompleteLecture = () => {
-        for (let sectionIdx = 0; sectionIdx < sections.length; sectionIdx++) {
-          const section = sections[sectionIdx];
-          if (section.lectures && section.lectures.length > 0) {
-            for (let lectureIdx = 0; lectureIdx < section.lectures.length; lectureIdx++) {
-              const lecture = section.lectures[lectureIdx];
-              const progress = userProgress.lectureProgress.find(
-                lp => lp.lectureId === lecture._id
-              );
-              
-              // If lecture is not completed, select it
-              if (!progress?.completed) {
-                return {
-                  lecture,
-                  sectionId: section._id || section.id,
-                  sectionIndex: sectionIdx
-                };
-              }
-            }
-          }
+    if (!currentLecture) return;
+
+    const fetchIfNeeded = async () => {
+      try {
+        const type = currentLecture.type;
+        const id = currentLecture._id;
+
+        // Only fetch if not already present in state
+        if (type === 'quiz' && !quizzes[id]) {
+          setIsLoadingLecture(true);
+          await fetchContentData(id, 'quiz');
+          setIsLoadingLecture(false);
+        } else if (type === 'article' && !articles[id]) {
+          setIsLoadingLecture(true);
+          await fetchContentData(id, 'article');
+          setIsLoadingLecture(false);
+        } else if (type === 'assignment' && !assignments[id]) {
+          setIsLoadingLecture(true);
+          await fetchContentData(id, 'assignment');
+          setIsLoadingLecture(false);
         }
-        // If all lectures completed, return null
-        return null;
-      };
-      
-      const firstIncomplete = findFirstIncompleteLecture();
-      if (firstIncomplete) {
-        const lectureWithSection = {
-          ...firstIncomplete.lecture,
-          sectionId: firstIncomplete.sectionId
-        };
-        setCurrentLecture(lectureWithSection);
-        setExpandedSections(prev => ({
-          ...prev,
-          [firstIncomplete.sectionId]: true
-        }));
-        console.log('Selected first incomplete lecture:', lectureWithSection);
+      } catch (e) {
+        console.error('Error auto-fetching lecture content:', e);
+        setIsLoadingLecture(false);
       }
-    }
-  }, [userProgress.lectureProgress, sections]);
+    };
+
+    fetchIfNeeded();
+  }, [currentLecture, quizzes, articles, assignments]);
+
+  // Remove the conflicting useEffect that was trying to select lectures
+  // fetchCourseData now handles all position logic
+  // fetchCourseData now handles all position logic
 
   const fetchContentData = async (lectureId, contentType) => {
     try {
-      console.log(`Fetching ${contentType} data for lecture:`, lectureId);
-      
-      // Check if we have mock data first
-      if (lectureId === 'mock-lecture-2' && contentType === 'quiz') {
-        // Use mock quiz data
-        const mockQuiz = {
-          instructions: 'Please answer all questions to the best of your ability.',
-          passingScore: 70,
-          questions: [
-            {
-              _id: 'q1',
-              question: 'What is the main purpose of this course?',
-              type: 'multiple-choice',
-              options: [
-                'To learn programming',
-                'To understand web development', 
-                'To master React.js',
-                'All of the above'
-              ],
-              correctAnswer: 'All of the above'
-            },
-            {
-              _id: 'q2',
-              question: 'Which technology is primarily used for frontend development?',
-              type: 'multiple-choice',
-              options: [
-                'Node.js',
-                'MongoDB',
-                'React.js',
-                'Express.js'
-              ],
-              correctAnswer: 'React.js'
+      // locate lecture indices
+      let sectionIndex = -1;
+      let lectureIndex = -1;
+
+      if (course?.curriculum?.sections) {
+        for (let i = 0; i < course.curriculum.sections.length; i++) {
+          const section = course.curriculum.sections[i];
+          if (!section.lectures) continue;
+          for (let j = 0; j < section.lectures.length; j++) {
+            const lecture = section.lectures[j];
+            if (String(lecture._id) === String(lectureId)) {
+              sectionIndex = i;
+              lectureIndex = j;
+              break;
             }
-          ]
-        };
-        setQuizzes(prev => ({ ...prev, [lectureId]: mockQuiz }));
-        console.log('Mock quiz data loaded:', mockQuiz);
+          }
+          if (sectionIndex !== -1) break;
+        }
+      }
+
+      // fallback: try learner-content endpoint if indices not found
+      if (sectionIndex === -1 || lectureIndex === -1) {
+        try {
+          const learnerResponse = await api.get(`/courses/${courseId}/learner-content`);
+          if (learnerResponse.data?.success && learnerResponse.data.course) {
+            const courseData = learnerResponse.data.course;
+            for (const section of courseData.curriculum?.sections || []) {
+              for (const lecture of section.lectures || []) {
+                if (String(lecture._id) === String(lectureId) && lecture.type === contentType) {
+                  if (contentType === 'quiz' && lecture.quiz) setQuizzes(prev => ({ ...prev, [lectureId]: lecture.quiz }));
+                  if (contentType === 'article' && lecture.article) setArticles(prev => ({ ...prev, [lectureId]: lecture.article }));
+                  if (contentType === 'assignment' && lecture.assignment) setAssignments(prev => ({ ...prev, [lectureId]: lecture.assignment }));
+                  return;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching learner content fallback:', e);
+        }
         return;
       }
-      
-      switch (contentType) {
-        case 'quiz':
-          const quizResponse = await api.get(`/courses/${courseId}/quiz/${lectureId}`);
-          console.log('Quiz API response:', quizResponse.data);
-          if (quizResponse.data.success) {
-            setQuizzes(prev => ({ ...prev, [lectureId]: quizResponse.data.quiz }));
-          }
-          break;
-        case 'article':
-          const articleResponse = await api.get(`/courses/${courseId}/article/${lectureId}`);
-          if (articleResponse.data.success) {
-            setArticles(prev => ({ ...prev, [lectureId]: articleResponse.data.article }));
-          }
-          break;
-        case 'assignment':
-          const assignmentResponse = await api.get(`/courses/${courseId}/assignment/${lectureId}`);
-          if (assignmentResponse.data.success) {
-            setAssignments(prev => ({ ...prev, [lectureId]: assignmentResponse.data.assignment }));
-          }
-          break;
-        default:
-          break;
+
+      // fetch based on content type
+      if (contentType === 'quiz') {
+        const res = await api.get(`/courses/${courseId}/section/${sectionIndex}/lecture/${lectureIndex}/quiz`);
+        if (res.data?.success) setQuizzes(prev => ({ ...prev, [lectureId]: res.data.quiz }));
+      } else if (contentType === 'article') {
+        const res = await api.get(`/courses/${courseId}/section/${sectionIndex}/lecture/${lectureIndex}/article`);
+        if (res.data?.success) setArticles(prev => ({ ...prev, [lectureId]: res.data.article }));
+      } else if (contentType === 'assignment') {
+        const res = await api.get(`/courses/${courseId}/section/${sectionIndex}/lecture/${lectureIndex}/assignment`);
+        if (res.data?.success) setAssignments(prev => ({ ...prev, [lectureId]: res.data.assignment }));
+      } else {
+        console.log('Unknown content type:', contentType);
       }
     } catch (error) {
       console.error(`Error fetching ${contentType} data:`, error);
-      
-      // Fallback to mock data for testing
-      if (contentType === 'quiz' && lectureId === 'mock-lecture-2') {
-        const mockQuiz = {
-          instructions: 'Please answer all questions to the best of your ability.',
-          passingScore: 70,
-          questions: [
-            {
-              _id: 'q1',
-              question: 'What is the main purpose of this course?',
-              type: 'multiple-choice',
-              options: [
-                'To learn programming',
-                'To understand web development',
-                'To master React.js', 
-                'All of the above'
-              ],
-              correctAnswer: 'All of the above'
-            }
-          ]
-        };
-        setQuizzes(prev => ({ ...prev, [lectureId]: mockQuiz }));
-        console.log('Using fallback mock quiz data');
+      if (contentType === 'quiz') {
+        setQuizzes(prev => ({ ...prev, [lectureId]: { error: true, message: 'Failed to load quiz. Please try again.' } }));
       }
     }
   };
 
   const submitQuiz = async (lectureId, answers) => {
     try {
-      const userId = localStorage.getItem('userId');
-      const response = await api.post(`/courses/${courseId}/quiz/${lectureId}/submit`, {
-        learnerId: userId,
-        answers,
-        submittedAt: new Date().toISOString()
-      });
+      console.log('Submitting quiz answers:', { lectureId, answers });
       
-      if (response.data.success) {
-        setQuizResults(prev => ({ ...prev, [lectureId]: response.data.result }));
-        // Mark quiz as completed if passed
-        if (response.data.result.passed) {
-          markLectureCompleted(lectureId, 'quiz');
+      // Find section and lecture indices
+      let sectionIndex = -1;
+      let lectureIndex = -1;
+      
+      if (course && course.curriculum && course.curriculum.sections) {
+        for (let i = 0; i < course.curriculum.sections.length; i++) {
+          const section = course.curriculum.sections[i];
+          if (section.lectures) {
+            for (let j = 0; j < section.lectures.length; j++) {
+              const lecture = section.lectures[j];
+              if (String(lecture._id) === String(lectureId)) {
+                sectionIndex = i;
+                lectureIndex = j;
+                break;
+              }
+            }
+          }
         }
       }
+      
+      if (sectionIndex === -1 || lectureIndex === -1) {
+        console.error('Could not find lecture indices for quiz submission');
+        alert('Error: Could not find lecture. Please refresh and try again.');
+        return { success: false, error: 'Lecture not found' };
+      }
+      
+      const userId = localStorage.getItem('userId');
+      
+      // Track attempt count
+      const currentAttempts = quizAttempts[lectureId] || 0;
+      const newAttemptCount = currentAttempts + 1;
+      
+      const response = await api.post(
+        `/courses/${courseId}/section/${sectionIndex}/lecture/${lectureIndex}/quiz/submit`,
+        {
+          learnerId: userId,
+          answers: answers,
+          submittedAt: new Date().toISOString(),
+          attemptNumber: newAttemptCount
+        }
+      );
+      
+      console.log('Quiz submission response:', response.data);
+      
+      if (response.data.success) {
+        // Update attempt count
+        setQuizAttempts(prev => ({ 
+          ...prev, 
+          [lectureId]: newAttemptCount 
+        }));
+        
+        // Store quiz result
+        const result = response.data.result;
+        setQuizResults(prev => ({ 
+          ...prev, 
+          [lectureId]: {
+            ...result,
+            attemptNumber: newAttemptCount,
+            attemptsUsed: newAttemptCount
+          }
+        }));
+        
+        // Get the quiz data to check max attempts
+        const currentQuiz = quizzes[lectureId];
+        const maxAttempts = currentQuiz?.attemptsAllowed || 3;
+        const hasAttemptsLeft = newAttemptCount < maxAttempts;
+        
+        if (result.passed) {
+          // Passed - mark as completed
+          markLectureCompleted(lectureId, 'quiz');
+          alert(`🎉 Congratulations! You passed with ${result.percentage}%`);
+        } else {
+          // Failed
+          if (hasAttemptsLeft) {
+            const remainingAttempts = maxAttempts - newAttemptCount;
+            alert(`📚 You scored ${result.percentage}% (Need ${result.passingScore}% to pass)\nYou have ${remainingAttempts} attempt(s) remaining.`);
+          } else {
+            // No attempts left - auto-complete as attempted
+            markLectureCompleted(lectureId, 'quiz');
+            alert(`📚 Quiz attempts exhausted. You used all ${maxAttempts} attempts.\nThe quiz has been marked as completed so you can continue with the course.`);
+          }
+        }
+        
+        // Update result with attempt info
+        setQuizResults(prev => ({ 
+          ...prev, 
+          [lectureId]: {
+            ...result,
+            attemptNumber: newAttemptCount,
+            attemptsUsed: newAttemptCount,
+            maxAttempts: maxAttempts,
+            hasAttemptsLeft: hasAttemptsLeft,
+            autoCompleted: !result.passed && !hasAttemptsLeft
+          }
+        }));
+      }
+      
       return response.data;
     } catch (error) {
-      console.error('Error submitting quiz:', error);
+      console.error('Quiz submission error:', error);
+      alert('Failed to submit quiz. Please try again.');
       return { success: false, error: error.message };
     }
   };
@@ -960,6 +1497,250 @@ const LearnerCourseView = () => {
     }
   };
 
+
+  // Fetch saved progress for current lecture using the new API endpoint
+  const fetchLectureProgress = async (lectureId) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      console.log('📡 CLIENT: Fetching specific lecture progress:', {
+        userId,
+        courseId,
+        lectureId,
+        endpoint: `/courses/progress/${userId}/${courseId}/${lectureId}`
+      });
+      
+      if (userId) {
+        const response = await api.get(`/courses/progress/${userId}/${courseId}/${lectureId}`);
+        console.log('📊 CLIENT: Lecture progress response:', {
+          status: response.status,
+          success: response.data?.success,
+          hasProgress: response.data?.hasProgress,
+          data: response.data?.progress
+        });
+        
+        if (response.data && response.data.success && response.data.hasProgress) {
+          const progress = response.data.progress;
+          console.log('✅ CLIENT: Found saved lecture progress:', {
+            currentTime: progress.currentTime,
+            videoProgress: progress.videoProgress,
+            completed: progress.completed,
+            lastAccessed: progress.lastAccessed
+          });
+          return progress;
+        } else {
+          console.log('📝 CLIENT: No saved progress for this lecture');
+          return null;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ CLIENT: Error fetching lecture progress:', error);
+      return null;
+    }
+  };
+
+  // Fetch saved progress for current lecture (legacy method)
+  const fetchLectureProgressLegacy = async (lectureId) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      console.log('📡 CLIENT: Fetching lecture progress:', {
+        userId,
+        courseId,
+        lectureId,
+        endpoint: `/courses/progress/${userId}/${courseId}`
+      });
+      
+      const response = await api.get(`/courses/progress/${userId}/${courseId}`);
+      
+      if (response.data.success) {
+        const lectureProgress = response.data.progress.lectureProgress.find(
+          p => p.lectureId === lectureId
+        );
+        
+        console.log('📊 CLIENT: Fetched progress data:', {
+          totalRecords: response.data.progress.lectureProgress.length,
+          foundLectureProgress: lectureProgress,
+          allProgress: response.data.progress.lectureProgress
+        });
+        
+        return lectureProgress || null;
+      }
+    } catch (error) {
+      console.error('❌ CLIENT: Error fetching lecture progress:', error.response?.data || error.message);
+    }
+    return null;
+  };
+
+  // Video event handlers
+  const handleVideoTimeUpdate = (currentTime, duration) => {
+    if (duration > 0) {
+      const progressPercent = (currentTime / duration) * 100;
+      setVideoProgress(progressPercent);
+      setVideoWatchedPercentage(progressPercent);
+      setLastWatchedPosition(currentTime);
+      
+      // Save progress every 10 seconds while playing
+      const now = Date.now();
+      if (now - lastSaveTime >= 10000 && currentLecture && isPlaying) {
+        setLastSaveTime(now);
+        saveVideoProgress(currentLecture._id, currentTime, progressPercent, false);
+      }
+      
+      // Auto-mark video as complete when 90% watched
+      if (progressPercent >= (videoCompleteThreshold * 100) && !currentLectureCompleted && currentLecture) {
+        console.log('Video 90% completed, marking lecture as complete');
+        markLectureCompleted(currentLecture._id, 'video');
+        
+        // Auto-move to next lecture after a short delay
+        setTimeout(() => {
+          moveToNextLecture();
+        }, 2000);
+      }
+    }
+  };
+
+  // Save video progress to server
+  const saveVideoProgress = async (lectureId, currentTime, progressPercent, completed = false) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId || !lectureId) return;
+      
+      console.log('💾 CLIENT: Saving video progress:', {
+        lectureId,
+        currentTime: Math.round(currentTime),
+        progressPercent: Math.round(progressPercent),
+        completed
+      });
+      
+      await api.post('/courses/updateLectureProgress', {
+        learnerId: userId,
+        courseId: courseId,
+        lectureId: lectureId,
+        sectionId: currentLecture?.sectionId || null,
+        currentTime: Math.round(currentTime),
+        videoProgress: Math.round(progressPercent),
+        completed: completed,
+        contentType: 'video'
+      });
+      
+      console.log('✅ CLIENT: Progress saved successfully');
+    } catch (error) {
+      console.error('❌ CLIENT: Error saving progress:', error.response?.data || error.message);
+    }
+  };
+
+  const handleVideoPlay = () => {
+    console.log('▶️ CLIENT: Video play triggered:', {
+      lectureTitle: currentLecture?.title,
+      currentPosition: lastWatchedPosition
+    });
+    setIsPlaying(true);
+    setHasVideoStarted(true);
+  };
+
+  const handleVideoPause = () => {
+    console.log('⏸️ CLIENT: Video pause triggered:', {
+      lectureTitle: currentLecture?.title,
+      pausedAt: lastWatchedPosition,
+      progress: videoWatchedPercentage
+    });
+    setIsPlaying(false);
+    
+    // Save current progress immediately on pause
+    if (currentLecture && lastWatchedPosition > 0) {
+      saveVideoProgress(currentLecture._id, lastWatchedPosition, videoWatchedPercentage, false);
+    }
+  };
+
+  const handleVideoEnded = async () => {
+    setIsPlaying(false);
+    
+    console.log('🎬 CLIENT: Video ended naturally - marking as completed and saving final progress');
+    
+    if (currentLecture && !currentLectureCompleted) {
+      // Save 100% completion progress to server
+      await saveVideoProgress(currentLecture._id, lastWatchedPosition, 100, true);
+      
+      // Mark lecture as complete locally
+      setCurrentLectureCompleted(true);
+      setVideoWatchedPercentage(100);
+
+      // Refresh local progress state
+      try {
+        await fetchUserProgress();
+        console.log('🔄 CLIENT: User progress refreshed after completion');
+      } catch (e) {
+        console.error('Error refreshing user progress after completion:', e);
+      }
+
+      // Auto-move to next lecture after a short delay
+      setTimeout(() => moveToNextLecture(), 2000);
+    }
+  };
+
+  // Move to next incomplete lecture
+  const moveToNextLecture = () => {
+    const nextContent = getNextContent();
+    if (nextContent) {
+      console.log('Moving to next lecture:', nextContent.title);
+      // `getNextContent` returns a wrapper with the actual lecture in `data`.
+      // Ensure we pass the raw lecture object to `selectLecture`.
+      const lectureObj = nextContent.data || nextContent;
+      const sectionId = nextContent.sectionId || lectureObj.sectionId || null;
+      selectLecture(lectureObj, sectionId);
+    } else {
+      console.log('Course completed!');
+      // Mark course as complete
+      markCourseAsComplete();
+    }
+  };
+
+  // Mark entire course as complete
+  const markCourseAsComplete = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      const response = await api.post(`/courses/complete/${courseId}/${userId}`);
+      if (response.data.success) {
+        console.log('Course marked as complete');
+        setOverallCourseProgress(100);
+        alert('🎉 Congratulations! You have completed the entire course!');
+      }
+    } catch (error) {
+      console.error('Error marking course as complete:', error);
+    }
+  };
+
+  // Update lecture progress on server
+  const updateLectureProgress = async (lectureId, watchedTime, progressPercent) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      const completed = progressPercent >= 90;
+      
+      console.log('🔄 CLIENT: updateLectureProgress (legacy) called:', {
+        lectureId,
+        watchedTime,
+        progressPercent,
+        completed
+      });
+      
+      await api.post('/courses/updateLectureProgress', {
+        learnerId: userId,
+        courseId: courseId,
+        lectureId: lectureId,
+        sectionId: currentLecture?.sectionId || null,
+        currentTime: watchedTime,
+        videoProgress: progressPercent,
+        progress: Math.round(progressPercent),
+        completed: completed,
+        contentType: 'video'
+      });
+      
+      console.log('✅ CLIENT: Legacy progress update successful');
+    } catch (error) {
+      console.error('❌ CLIENT: Error updating lecture progress (legacy):', error.response?.data || error.message);
+    }
+  };
+
   const fetchCourseData = async () => {
     try {
       const response = await api.get(`/courses/${courseId}`);
@@ -973,34 +1754,85 @@ const LearnerCourseView = () => {
           console.log('Course sections found:', response.data.curriculum.sections);
           setSections(response.data.curriculum.sections);
           
-          // Auto-select first incomplete lecture instead of always first lecture
-          const findFirstIncompleteLecture = () => {
-            for (let sectionIdx = 0; sectionIdx < response.data.curriculum.sections.length; sectionIdx++) {
-              const section = response.data.curriculum.sections[sectionIdx];
-              if (section.lectures && section.lectures.length > 0) {
-                for (let lectureIdx = 0; lectureIdx < section.lectures.length; lectureIdx++) {
-                  const lecture = section.lectures[lectureIdx];
-                  // Check if lecture is incomplete (will be updated after fetchUserProgress)
-                  return {
-                    lecture,
-                    sectionId: section._id || section.id || 0,
-                    sectionIndex: sectionIdx
-                  };
-                }
+          // Ensure we have the user's progress loaded (used to find next incomplete)
+          const progressResponse = await fetchUserProgress();
+          const progressData = progressResponse || { lectureProgress: [] };
+
+          // Get user's current position to determine where to continue
+          const currentPosition = await fetchUserCurrentPosition();
+          
+          if (currentPosition && !currentPosition.shouldStartFromBeginning) {
+            // User has progress - continue from their current position
+            console.log('🎯 CLIENT: Continuing from user position:', currentPosition);
+            console.log('🎯 CLIENT: Using progress data:', progressData);
+            
+            // Find the lecture in the course structure
+            let targetLecture = null;
+            let targetSectionId = null;
+            
+            for (const section of response.data.curriculum.sections) {
+              const foundLecture = section.lectures.find(
+                lecture => lecture._id.toString() === currentPosition.lectureId
+              );
+              
+              if (foundLecture) {
+                targetLecture = {
+                  ...foundLecture,
+                  sectionId: section._id || section.id || 0
+                };
+                targetSectionId = section._id || section.id || 0;
+                break;
               }
             }
-            return null;
-          };
-          
-          const firstLecture = findFirstIncompleteLecture();
-          if (firstLecture) {
-            const lectureWithSection = {
-              ...firstLecture.lecture,
-              sectionId: firstLecture.sectionId
-            };
-            console.log('Auto-selecting first lecture:', lectureWithSection);
-            setCurrentLecture(lectureWithSection);
-            setExpandedSections({ [firstLecture.sectionId]: true });
+            
+            if (targetLecture) {
+              console.log('✅ CLIENT: Found target lecture for restoration:', targetLecture.title);
+              // If the saved position indicates the lecture is completed, try to advance to next incomplete
+              if (currentPosition.isCompleted) {
+                console.log('🔁 CLIENT: Current position is completed; searching for next incomplete lecture');
+                const next = findNextIncompleteFrom(targetLecture, targetSectionId, progressData);
+                if (next) {
+                  console.log('➡️ CLIENT: Auto-starting next incomplete lecture:', next.title);
+                  // Call selectLecture to properly set up the lecture (including fetching content data)
+                  await selectLecture(next.data, next.sectionId);
+                } else {
+                  console.log('⚠️ CLIENT: No next incomplete lecture found; staying on completed lecture');
+                  // No next incomplete found; show the completed lecture
+                  setCurrentLecture(targetLecture);
+                  setExpandedSections({ [targetSectionId]: true });
+                  setCurrentLectureCompleted(true);
+                }
+              } else {
+                // Set the lecture and prepare for resume
+                setCurrentLecture(targetLecture);
+                setExpandedSections({ [targetSectionId]: true });
+                
+                // Set resume position if not completed
+                if (!currentPosition.isCompleted && currentPosition.currentTime > 0) {
+                  setLastWatchedPosition(currentPosition.currentTime);
+                  setVideoWatchedPercentage(currentPosition.videoProgress || 0);
+                  setAutoResumeActive(true);
+                  console.log(`⏮️ CLIENT: AUTOMATIC RESUME configured - will resume from ${currentPosition.currentTime}s (${(currentPosition.videoProgress || 0).toFixed(2)}%)`);
+                  
+                  // Show auto-resume notification to user
+                  console.log(`🎯 CLIENT: AUTO-RESUME ACTIVE - User will continue from where they left off`);
+                } else if (currentPosition.isNext) {
+                  console.log('➡️ CLIENT: Starting next incomplete lecture');
+                  setLastWatchedPosition(0);
+                  setVideoWatchedPercentage(0);
+                  setAutoResumeActive(false);
+                }
+              }
+              setCurrentLectureCompleted(currentPosition.isCompleted || false);
+            } else {
+              // Fallback to first lecture if target not found
+              console.log('⚠️ CLIENT: Target lecture not found, falling back to first');
+              selectFirstLecture(response.data.curriculum.sections);
+            }
+          } else {
+            // No progress or should start from beginning
+            console.log('🆕 CLIENT: Starting course from beginning');
+            selectFirstLecture(response.data.curriculum.sections);
           }
         } else {
           console.log('No curriculum found in course data, adding mock curriculum for testing');
@@ -1076,13 +1908,56 @@ const LearnerCourseView = () => {
           
           setSections(mockCurriculum.sections);
           
-          // Auto-select first mock lecture
-          const firstLecture = {
-            ...mockCurriculum.sections[0].lectures[0],
-            sectionId: mockCurriculum.sections[0]._id
-          };
-          setCurrentLecture(firstLecture);
-          setExpandedSections({ [mockCurriculum.sections[0]._id]: true });
+          // Even with mock curriculum, check user's current position
+          const currentPosition = await fetchUserCurrentPosition();
+          
+          if (currentPosition && !currentPosition.shouldStartFromBeginning) {
+            // User has progress - find the lecture in mock curriculum
+            console.log('🎯 CLIENT: (Mock) Continuing from user position:', currentPosition);
+            
+            let targetLecture = null;
+            let targetSectionId = null;
+            
+            for (const section of mockCurriculum.sections) {
+              const foundLecture = section.lectures.find(
+                lecture => lecture._id.toString() === currentPosition.lectureId
+              );
+              
+              if (foundLecture) {
+                targetLecture = {
+                  ...foundLecture,
+                  sectionId: section._id
+                };
+                targetSectionId = section._id;
+                break;
+              }
+            }
+            
+            if (targetLecture) {
+              console.log('✅ CLIENT: (Mock) Found target lecture:', targetLecture.title);
+              setCurrentLecture(targetLecture);
+              setExpandedSections({ [targetSectionId]: true });
+              
+              // Set resume position if not completed
+              if (!currentPosition.isCompleted && currentPosition.currentTime > 0) {
+                setLastWatchedPosition(currentPosition.currentTime);
+                setVideoWatchedPercentage(currentPosition.videoProgress || 0);
+                console.log(`⏮️ CLIENT: (Mock) Will resume from ${currentPosition.currentTime}s`);
+              } else if (currentPosition.isNext) {
+                console.log('➡️ CLIENT: (Mock) Starting next incomplete lecture');
+                setLastWatchedPosition(0);
+                setVideoWatchedPercentage(0);
+              }
+              
+              setCurrentLectureCompleted(currentPosition.isCompleted || false);
+            } else {
+              console.log('⚠️ CLIENT: (Mock) Target lecture not found, selecting first');
+              selectFirstLecture(mockCurriculum.sections);
+            }
+          } else {
+            console.log('🆕 CLIENT: (Mock) Starting from beginning');
+            selectFirstLecture(mockCurriculum.sections);
+          }
         }
       }
     } catch (error) {
@@ -1093,22 +1968,110 @@ const LearnerCourseView = () => {
   const fetchUserProgress = async () => {
     try {
       const userId = localStorage.getItem('userId');
+      console.log('📡 CLIENT: Fetching user progress with details:', {
+        userId,
+        courseId,
+        endpoint: `/courses/progress/${userId}/${courseId}`,
+        userIdExists: !!userId,
+        courseIdExists: !!courseId
+      });
+      
       if (userId) {
         const response = await api.get(`/courses/progress/${userId}/${courseId}`);
-        console.log('Progress response:', response.data);
+        console.log('📋 CLIENT: Full progress response:', {
+          status: response.status,
+          data: response.data,
+          success: response.data?.success,
+          progressExists: !!response.data?.courseProgress
+        });
+        
         if (response.data && response.data.success) {
-          setUserProgress({
-            ...response.data.progress,
-            lectureProgress: response.data.progress?.lectureProgress || []
-          });
-          console.log('User progress loaded:', response.data.progress);
+          // API returns courseProgress, not progress
+          const progressData = response.data.courseProgress || response.data.progress || {};
+          const userProgressData = {
+            ...progressData,
+            lectureProgress: progressData.lectureProgress || []
+          };
+          setUserProgress(userProgressData);
+          console.log('User progress loaded:', userProgressData);
+          return userProgressData;
         } else {
-          setUserProgress({ lectureProgress: [] });
+          console.log('⚠️ CLIENT: No valid progress data received');
+          const emptyProgress = { lectureProgress: [] };
+          setUserProgress(emptyProgress);
+          return emptyProgress;
         }
       }
     } catch (error) {
       console.error('Error fetching progress:', error);
-      setUserProgress({ lectureProgress: [] });
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      const emptyProgress = { lectureProgress: [] };
+      setUserProgress(emptyProgress);
+      return emptyProgress;
+    }
+  };
+
+  // New function to fetch user's current position and determine where to continue
+  const fetchUserCurrentPosition = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) return null;
+      
+      console.log('🎯 CLIENT: Fetching user current position...', {
+        userId,
+        courseId,
+        endpoint: `/courses/current-position/${userId}/${courseId}`
+      });
+      
+      const response = await api.get(`/courses/current-position/${userId}/${courseId}`);
+      
+      if (response.data && response.data.success) {
+        console.log('📍 CLIENT: Current position response:', response.data.currentPosition);
+        return response.data.currentPosition;
+      }
+      
+      // If no current position found, call debug endpoint to understand why
+      console.log('🐛 CLIENT: No current position found, calling debug endpoint...');
+      try {
+        const debugResponse = await api.get(`/courses/debug-progress/${userId}/${courseId}`);
+        console.log('🐛 CLIENT: Debug response:', debugResponse.data);
+      } catch (debugError) {
+        console.log('🐛 CLIENT: Debug endpoint failed:', debugError);
+      }
+      
+      console.log('⚠️ CLIENT: No current position data received');
+      return null;
+    } catch (error) {
+      console.error('❌ CLIENT: Error fetching current position:', error);
+      console.error('❌ CLIENT: Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      return null;
+    }
+  };
+
+  // Helper function to select the first available lecture
+  const selectFirstLecture = (sections) => {
+    for (const section of sections) {
+      if (section.lectures && section.lectures.length > 0) {
+        const firstLecture = {
+          ...section.lectures[0],
+          sectionId: section._id || section.id || 0
+        };
+        console.log('📍 CLIENT: Selecting first lecture:', firstLecture.title);
+        setCurrentLecture(firstLecture);
+        setExpandedSections({ [section._id || section.id || 0]: true });
+        setLastWatchedPosition(0);
+        setVideoWatchedPercentage(0);
+        setCurrentLectureCompleted(false);
+        return;
+      }
     }
   };
 
@@ -1206,15 +2169,24 @@ const LearnerCourseView = () => {
       });
       
       // Update server with comprehensive data
+      console.log('🎯 CLIENT: markLectureCompleted - sending to server:', {
+        learnerId: userId,
+        courseId,
+        lectureId,
+        contentType,
+        completed: true
+      });
+      
       const response = await api.post('/courses/updateLectureProgress', {
         learnerId: userId,
         courseId,
         lectureId,
-        sectionId: currentLecture?.sectionId,
+        sectionId: currentLecture?.sectionId || null,
         completed: true,
         videoProgress: contentType === 'video' ? 100 : 0,
+        progress: contentType === 'video' ? 100 : 0,
+        currentTime: contentType === 'video' ? (lastWatchedPosition || 0) : 0, // Add required currentTime
         contentType,
-        completedAt: new Date().toISOString(),
         watchTime: 0,
         totalDuration: 0
       });
@@ -1369,39 +2341,171 @@ const LearnerCourseView = () => {
     }));
   };
 
-  const selectLecture = (lecture, sectionId) => {
+  // Find the next incomplete lecture after a given lecture (searches same section then subsequent sections)
+  const findNextIncompleteFrom = (lecture, sectionId, progressData = null) => {
+    if (!sections || sections.length === 0) return null;
+
+    // Use provided progressData or fall back to state
+    const lectureProgress = progressData?.lectureProgress || userProgress.lectureProgress || [];
+
+    const sectionIndex = sections.findIndex(s => (s._id || s.id) === sectionId);
+    if (sectionIndex === -1) return null;
+
+    const lecturesInSection = sections[sectionIndex]?.lectures || [];
+    const lectureIndex = lecturesInSection.findIndex(l => String(l._id) === String(lecture._id));
+    if (lectureIndex === -1) return null;
+
+    // Look in same section for next incomplete
+    for (let i = lectureIndex + 1; i < lecturesInSection.length; i++) {
+      const candidate = lecturesInSection[i];
+      const prog = lectureProgress.find(lp => String(lp.lectureId) === String(candidate._id));
+      if (!prog?.completed) {
+        return { data: candidate, sectionId: sectionId, sectionNumber: sectionIndex + 1, lectureNumber: i + 1, title: candidate.title };
+      }
+    }
+
+    // Look in following sections
+    for (let s = sectionIndex + 1; s < sections.length; s++) {
+      const sec = sections[s];
+      if (!sec.lectures || sec.lectures.length === 0) continue;
+      for (let j = 0; j < sec.lectures.length; j++) {
+        const candidate = sec.lectures[j];
+        const prog = lectureProgress.find(lp => String(lp.lectureId) === String(candidate._id));
+        if (!prog?.completed) {
+          return { data: candidate, sectionId: sec._id || sec.id, sectionNumber: s + 1, lectureNumber: j + 1, title: candidate.title };
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const selectLecture = async (lecture, sectionId, forceLoad = false) => {
+    console.log('Selecting lecture:', lecture.title, 'Type:', lecture.type, 'ForceLoad:', forceLoad);
+
+    // Check lecture access status
     const status = getLectureStatus(lecture, sectionId);
-    
-    // Allow access to available and completed lectures
+    console.log('Lecture access status:', status);
+
+    // If locked, ignore
+    if (status === 'locked') {
+      console.log('Lecture not accessible (locked):', lecture.title);
+      return;
+    }
+
+    // If lecture already completed and not forcing load, auto-advance to next incomplete lecture
+    if (status === 'completed' && !forceLoad) {
+      console.log('Lecture already completed, searching for next incomplete...');
+      const next = findNextIncompleteFrom(lecture, sectionId);
+      if (next) {
+        console.log('Auto-advancing to next incomplete lecture:', next.title);
+        // select the lecture object
+        await selectLecture(next.data, next.sectionId, false);
+        return;
+      } else {
+        console.log('No next incomplete lecture found — loading completed lecture');
+        // Fall through to load the completed lecture
+      }
+    }
+
+    // Allow access to available or completed lectures
     if (status === 'available' || status === 'completed') {
+      // Set loading state
+      setIsLoadingLecture(true);
+      
       const lectureWithSection = { 
         ...lecture, 
         sectionId: sectionId 
       };
       setCurrentLecture(lectureWithSection);
       
-      // Fetch content data based on lecture type
-      if (['quiz', 'article', 'assignment'].includes(lecture.type)) {
-        fetchContentData(lecture._id, lecture.type);
+      // Reset video states for new lecture
+      setVideoProgress(0);
+      setVideoWatchedPercentage(0);
+      setHasVideoStarted(false);
+      setLastWatchedPosition(0);
+      setIsPlaying(false);
+      setAutoResumeActive(false);
+      
+      let savedProgress = null;
+      
+      try {
+        // For video lectures, fetch saved progress for resume functionality
+        if (lecture.type === 'video') {
+          console.log('🎥 CLIENT: Processing video lecture:', {
+            lectureId: lecture._id,
+            lectureTitle: lecture.title
+          });
+          
+          savedProgress = await fetchLectureProgress(lecture._id);
+          console.log('📋 CLIENT: Fetched saved progress for lecture:', savedProgress);
+          
+          if (savedProgress) {
+            const isCompleted = savedProgress.completed || false;
+            const resumeTime = savedProgress.currentTime || 0;
+            const resumeProgress = savedProgress.videoProgress || 0;
+            
+            console.log('🔄 CLIENT: Resume logic:', {
+              isCompleted,
+              resumeTime,
+              resumeProgress,
+              willAutoPlay: !isCompleted,
+              startPosition: isCompleted ? 0 : resumeTime
+            });
+            
+            setCurrentLectureCompleted(isCompleted);
+            
+            // Always restore saved timestamp for resume, regardless of completion status
+            if (resumeTime > 0) {
+              setLastWatchedPosition(resumeTime);
+              setVideoWatchedPercentage(resumeProgress);
+              setAutoResumeActive(true);
+              console.log(`✨ CLIENT: RESUMING from checkpoint: ${resumeTime}s (${resumeProgress.toFixed(2)}%) - Completed: ${isCompleted}`);
+            } else {
+              // New video or no saved time, start from beginning
+              setLastWatchedPosition(0);
+              setVideoWatchedPercentage(isCompleted ? 100 : 0);
+              setAutoResumeActive(false);
+              console.log(`🆕 CLIENT: ${isCompleted ? 'Completed video' : 'New video'}, starting from beginning`);
+            }
+          } else {
+            console.log('📝 CLIENT: No saved progress found, starting fresh');
+            setLastWatchedPosition(0);
+            setVideoWatchedPercentage(0);
+            setAutoResumeActive(false);
+          }
+        }
+        
+        // Check if lecture is already completed (fallback to old method)
+        if (!savedProgress) {
+          const lectureProgress = userProgress.lectureProgress?.find(
+            lp => String(lp.lectureId) === String(lecture._id)
+          );
+          setCurrentLectureCompleted(lectureProgress?.completed || false);
+          
+          // For completed lectures, load saved progress
+          if (lectureProgress?.currentTime) {
+            setLastWatchedPosition(lectureProgress.currentTime);
+            setVideoWatchedPercentage(lectureProgress.videoProgress || 0);
+            if (lectureProgress.currentTime > 0) {
+              setAutoResumeActive(true);
+            }
+          }
+        }
+        
+        console.log('Selected lecture:', lectureWithSection);
+        
+        // Fetch content data based on lecture type
+        if (['quiz', 'article', 'assignment'].includes(lecture.type)) {
+          console.log(`🎯 CLIENT: Fetching ${lecture.type} content for:`, lecture.title);
+          await fetchContentData(lecture._id, lecture.type);
+        }
+      } finally {
+        // Clear loading state
+        setIsLoadingLecture(false);
       }
-      
-      // Check if lecture is already completed
-      const lectureProgress = userProgress.lectureProgress?.find(
-        lp => lp.lectureId === lecture._id
-      );
-      setCurrentLectureCompleted(lectureProgress?.completed || false);
-      
-      // For completed lectures, start from beginning to allow replay
-      // For new lectures, start from saved progress
-      if (status === 'completed') {
-        setVideoProgress(0); // Allow full replay
-      } else {
-        setVideoProgress(lectureProgress?.videoProgress || 0);
-      }
-      
-      console.log('Selected lecture:', lectureWithSection, 'Status:', status);
     } else {
-      console.log('Lecture is locked:', lecture.title);
+      console.log('Lecture not accessible:', status);
     }
   };
 
@@ -1418,7 +2522,7 @@ const LearnerCourseView = () => {
   const getLectureStatus = (lecture, sectionId) => {
     // Check if lecture is completed in new progress structure
     const lectureProgress = userProgress.lectureProgress?.find(
-      lp => lp.lectureId === lecture._id
+      lp => String(lp.lectureId) === String(lecture._id)
     );
     
     if (lectureProgress?.completed) return 'completed';
@@ -1433,7 +2537,7 @@ const LearnerCourseView = () => {
     if (lectureIndex > 0) {
       const prevLecture = sections[sectionIndex].lectures[lectureIndex - 1];
       const prevProgress = userProgress.lectureProgress?.find(
-        lp => lp.lectureId === prevLecture._id
+        lp => String(lp.lectureId) === String(prevLecture._id)
       );
       if (prevProgress?.completed) return 'available';
     }
@@ -1443,7 +2547,7 @@ const LearnerCourseView = () => {
       const prevSection = sections[sectionIndex - 1];
       const allPrevSectionLecturesCompleted = prevSection.lectures.every(prevLecture => {
         const prevProgress = userProgress.lectureProgress?.find(
-          lp => lp.lectureId === prevLecture._id
+          lp => String(lp.lectureId) === String(prevLecture._id)
         );
         return prevProgress?.completed;
       });
@@ -1543,7 +2647,8 @@ const LearnerCourseView = () => {
                           locked={status === 'locked'}
                           onClick={() => {
                             if (status !== 'locked') {
-                              selectLecture(lecture, section._id);
+                              // Force load when user explicitly clicks on a lecture
+                              selectLecture(lecture, section._id, true);
                             }
                           }}
                         >
@@ -1577,70 +2682,121 @@ const LearnerCourseView = () => {
 
         {/* Main Content Area */}
         <VideoContentArea>
+          {/* Loading Indicator */}
+          {isLoadingLecture && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+              background: 'rgba(124, 58, 237, 0.1)',
+              borderRadius: '12px',
+              marginBottom: '1rem',
+              border: '1px solid rgba(124, 58, 237, 0.3)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                color: '#7c3aed'
+              }}>
+                <div style={{
+                  width: '24px',
+                  height: '24px',
+                  border: '3px solid rgba(124, 58, 237, 0.3)',
+                  borderTop: '3px solid #7c3aed',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                <span>Loading lecture content...</span>
+              </div>
+              <style>{`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+            </div>
+          )}
+
           {/* Video Section */}
           {currentLecture?.type === 'video' && (
             <VideoSection>
+              {/* Resume Indicator */}
+              {lastWatchedPosition > 30 && !currentLectureCompleted && (
+                <ResumeIndicator>
+                  <ResumeText>
+                    <FaClock className="resume-icon" />
+                    <div className="resume-message">
+                      {autoResumeActive ? 'Auto-resuming' : 'Resume'} from <span className="resume-time">{formatTime(lastWatchedPosition)}</span>
+                      {videoWatchedPercentage > 0 && (
+                        <span> ({Math.round(videoWatchedPercentage)}% watched)</span>
+                      )}
+                      {autoResumeActive && (
+                        <div style={{fontSize: '0.85em', opacity: 0.8, marginTop: '4px'}}>
+                          ✨ Automatically restored your last position
+                        </div>
+                      )}
+                    </div>
+                  </ResumeText>
+                  <ResumeButton onClick={() => {
+                    // Video player will automatically seek to lastWatchedPosition
+                    // This button just provides visual confirmation
+                    setAutoResumeActive(false);
+                    console.log('🎯 CLIENT: Resume clicked - will start from:', lastWatchedPosition);
+                  }}>
+                    <FaPlayCircle />
+                    {autoResumeActive ? 'Continue' : 'Resume'}
+                  </ResumeButton>
+                </ResumeIndicator>
+              )}
+              
               {currentLecture.videoUrl ? (
                 <div style={{ position: 'relative' }}>
+                  {/* Debug Info for Resume Position */}
+                  {console.log('🎥 CLIENT: Rendering LectureVideoPlayer with:', {
+                    lectureId: currentLecture._id,
+                    lectureTitle: currentLecture.title,
+                    startTime: lastWatchedPosition || 0,
+                    videoWatchedPercentage: videoWatchedPercentage,
+                    currentLectureCompleted: currentLectureCompleted,
+                    hasVideoStarted: hasVideoStarted
+                  })}
+                  
                   <LectureVideoPlayer
                     videoUrl={currentLecture.videoUrl}
-                    courseId={courseId}
-                    lectureId={currentLecture._id}
-                    sectionId={currentLecture.sectionId}
-                    onProgressUpdate={handleLectureProgress}
-                    onLectureComplete={handleLectureComplete}
-                    onCourseProgressUpdate={handleCourseProgressUpdate}
+                    onPlay={handleVideoPlay}
+                    onPause={handleVideoPause}
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onEnded={handleVideoEnded}
+                    autoPlay={false}
+                    startTime={lastWatchedPosition || 0}
+                    showCompletionOverlay={false}
                   />
                   
-                  {/* Bottom Content Area */}
-                  <VideoBottomContent show={nextContent}>
-                    {currentLectureCompleted && (
-                      <CompletionMessage>
-                        <FaCheck style={{ color: '#22c55e' }} />
-                        Lecture completed! Great job!
-                      </CompletionMessage>
-                    )}
-                    
-                    {nextContent && (
-                      <NextContentInfo>
-                        <NextContentDetails>
-                          <NextLabel>
-                            Next {nextContent.type === 'section' ? 'Section' : 'Lecture'}: 
-                            {nextContent.type === 'section' && ` ${nextContent.sectionTitle}`}
-                          </NextLabel>
-                          <NextTitle>{nextContent.title}</NextTitle>
-                          <NextMeta>
-                            Section {nextContent.sectionNumber}, Lecture {nextContent.lectureNumber}
-                            {nextContent.duration && ` • ${nextContent.duration}`}
-                          </NextMeta>
-                        </NextContentDetails>
-                        
-                        <NextButton 
-                          enabled={currentLectureCompleted}
-                          onClick={() => {
-                            if (currentLectureCompleted && nextContent) {
-                              selectLecture(nextContent.data, nextContent.sectionId);
-                              if (nextContent.type === 'section') {
-                                setExpandedSections(prev => ({
-                                  ...prev,
-                                  [nextContent.sectionId]: true
-                                }));
-                              }
-                            }
-                          }}
-                        >
-                          {currentLectureCompleted ? 'Continue' : 'Complete to Continue'}
-                        </NextButton>
-                      </NextContentInfo>
-                    )}
-                    
-                    {!nextContent && currentLectureCompleted && (
-                      <CompletionMessage>
-                        <FaCheck style={{ color: '#22c55e' }} />
-                        🎉 Congratulations! You've completed the entire course!
-                      </CompletionMessage>
-                    )}
-                  </VideoBottomContent>
+                  {/* Next Content Info - Non-blocking */}
+                  {nextContent && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '20px',
+                      right: '20px',
+                      background: 'rgba(0, 0, 0, 0.8)',
+                      color: 'white',
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      maxWidth: '300px',
+                      border: '1px solid rgba(124, 58, 237, 0.3)',
+                      zIndex: 5
+                    }}>
+                      <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#7c3aed' }}>
+                        Up Next: {nextContent.title}
+                      </div>
+                      <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                        Section {nextContent.sectionNumber}, Lecture {nextContent.lectureNumber}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <VideoPlayer>
@@ -1658,50 +2814,25 @@ const LearnerCourseView = () => {
           <ContentArea>
           {currentLecture ? (
             <>
-              <LectureTitle>{currentLecture.title}</LectureTitle>
+              <LectureTitle>
+                {currentLecture.title}
+              </LectureTitle>
               
-              {/* Course Progress Display */}
-              <CourseProgressSection>
-                <h3>Course Progress</h3>
-                <ProgressText>
-                  <span>Overall Completion</span>
-                  <span>{calculateCourseCompletion()}%</span>
-                </ProgressText>
-                <ProgressBarContainer>
-                  <CourseProgressBar progress={calculateCourseCompletion()} />
-                </ProgressBarContainer>
-                
-                {calculateCourseCompletion() === 100 && (
-                  <div style={{
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    border: '1px solid rgba(34, 197, 94, 0.3)',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    marginTop: '1rem',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '2rem' }}>🎉</span>
-                      <h4 style={{ margin: 0, color: '#22c55e' }}>Congratulations!</h4>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.9 }}>
-                      You have successfully completed the entire course!
-                    </p>
-                    <ActionButton 
-                      variant="success"
-                      style={{ marginTop: '1rem' }}
-                      onClick={() => {
-                        console.log('Generate certificate or handle course completion');
-                      }}
-                    >
-                      🏆 Get Certificate
-                    </ActionButton>
-                  </div>
-                )}
-              </CourseProgressSection>
+              {/* Course progress removed from content area - progress shown in left sidebar only */}
               
               <LectureDescription>
-                <p>{currentLecture.content || currentLecture.description}</p>
+                {(() => {
+                  const content = currentLecture.content || currentLecture.description || '';
+                  const title = currentLecture.title || '';
+                  // Avoid repeating the title if content equals or starts with the title
+                  if (!content) return null;
+                  if (content.trim() === title.trim()) return null;
+                  if (content.trim().startsWith(title.trim())) {
+                    // Remove the repeated title prefix
+                    return <p>{content.trim().slice(title.trim().length).trim()}</p>;
+                  }
+                  return <p>{content}</p>;
+                })()}
               </LectureDescription>
 
               {/* Quiz Handling */}
@@ -1716,9 +2847,19 @@ const LearnerCourseView = () => {
                   </QuizTitle>
                   
                   {quizzes[currentLecture._id] ? (
-                    <QuizContent quiz={quizzes[currentLecture._id]} 
-                                onSubmit={(answers) => submitQuiz(currentLecture._id, answers)}
-                                result={quizResults[currentLecture._id]} />
+                    <QuizContent 
+                      quiz={quizzes[currentLecture._id]} 
+                      onSubmit={(answers) => submitQuiz(currentLecture._id, answers)}
+                      result={quizResults[currentLecture._id]}
+                      currentAttempts={quizAttempts[currentLecture._id] || 0}
+                      onRetry={() => {
+                        // Clear current result to show quiz form again
+                        setQuizResults(prev => ({
+                          ...prev,
+                          [currentLecture._id]: null
+                        }));
+                      }}
+                    />
                   ) : (
                     <div>Loading quiz...</div>
                   )}
@@ -1736,22 +2877,35 @@ const LearnerCourseView = () => {
                     Article: {currentLecture.title}
                   </ArticleTitle>
                   
-                  {articles[currentLecture._id] ? (
-                    <ArticleContent>
-                      <div dangerouslySetInnerHTML={{ __html: articles[currentLecture._id].content }} />
-                      <ActionButton 
-                        variant="success"
-                        onClick={() => markLectureCompleted(currentLecture._id, 'article')}
-                        style={{ marginTop: '2rem' }}
-                        disabled={currentLectureCompleted}
-                      >
-                        <FaCheck />
-                        {currentLectureCompleted ? 'Article Completed' : 'Mark as Read'}
-                      </ActionButton>
-                    </ArticleContent>
-                  ) : (
-                    <div>Loading article...</div>
-                  )}
+                  {(() => {
+                    const entry = articles[currentLecture._id];
+                    const localFallback = currentLecture?.article?.content || currentLecture?.content || null;
+                    const hasFetched = typeof entry !== 'undefined';
+                    const contentHtml = entry?.content || entry?.textPreview || localFallback;
+
+                    if (!hasFetched && !contentHtml) {
+                      return <div>Loading article...</div>;
+                    }
+
+                    if (contentHtml) {
+                      return (
+                        <ArticleContent>
+                          <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
+                          <ActionButton 
+                            variant="success"
+                            onClick={() => markLectureCompleted(currentLecture._id, 'article')}
+                            style={{ marginTop: '2rem' }}
+                            disabled={currentLectureCompleted}
+                          >
+                            <FaCheck />
+                            {currentLectureCompleted ? 'Article Completed' : 'Mark as Read'}
+                          </ActionButton>
+                        </ArticleContent>
+                      );
+                    }
+
+                    return <div>No article content available.</div>;
+                  })()}
                 </ArticleCard>
               )}
 
@@ -1841,126 +2995,7 @@ const LearnerCourseView = () => {
         </ContentArea>
         </VideoContentArea>
 
-        {/* Right Sidebar - Course Progress & Next Steps */}
-        <Sidebar>
-          <SidebarHeader>
-            <SidebarTitle>Course Progress</SidebarTitle>
-          </SidebarHeader>
-          
-          {/* Course Progress Display */}
-          <div style={{ padding: '1.5rem' }}>
-            <ProgressText>
-              <span>Overall Completion</span>
-              <span>{calculateCourseCompletion()}%</span>
-            </ProgressText>
-            <ProgressBarContainer>
-              <CourseProgressBar progress={calculateCourseCompletion()} />
-            </ProgressBarContainer>
-            
-            {calculateCourseCompletion() === 100 && (
-              <div style={{
-                background: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                borderRadius: '8px',
-                padding: '1rem',
-                marginTop: '1rem',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎉</div>
-                <h4 style={{ margin: 0, color: '#22c55e', fontSize: '1rem' }}>Course Complete!</h4>
-                <ActionButton 
-                  variant="success"
-                  style={{ marginTop: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                  onClick={() => {
-                    console.log('Generate certificate or handle course completion');
-                  }}
-                >
-                  🏆 Get Certificate
-                </ActionButton>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile Course Content */}
-          <MobileContentSection>
-            <div style={{ borderTop: '1px solid rgba(124, 58, 237, 0.2)', paddingTop: '1rem' }}>
-              <div style={{ padding: '0 1.5rem 1rem 1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', margin: '0 0 1rem 0' }}>Course Content</h3>
-              </div>
-              
-              {sections.map((section, sectionIndex) => (
-                <SectionItem key={`mobile-${section._id}`}>
-                  <SectionHeader
-                    expanded={expandedSections[section._id]}
-                    onClick={() => toggleSection(section._id)}
-                  >
-                    <SectionTitle style={{ fontSize: '0.875rem' }}>
-                      Section {sectionIndex + 1}: {section.title}
-                      <span style={{ 
-                        fontSize: '0.75rem', 
-                        opacity: 0.7, 
-                        marginLeft: '0.5rem' 
-                      }}>
-                        ({section.lectures?.filter(lecture => {
-                          const progress = userProgress.lectureProgress?.find(lp => lp.lectureId === lecture._id);
-                          return progress?.completed;
-                        }).length || 0}/{section.lectures?.length || 0})
-                      </span>
-                    </SectionTitle>
-                    {expandedSections[section._id] ? <FaChevronDown /> : <FaChevronRight />}
-                  </SectionHeader>
-                  
-                  <AnimatePresence>
-                    {expandedSections[section._id] && (
-                      <LectureList
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        {section.lectures?.map((lecture, lectureIndex) => {
-                          const status = getLectureStatus(lecture, section._id);
-                          return (
-                            <LectureItem
-                              key={`mobile-${lecture._id}`}
-                              active={currentLecture?._id === lecture._id}
-                              locked={status === 'locked'}
-                              onClick={() => {
-                                if (status !== 'locked') {
-                                  selectLecture(lecture, section._id);
-                                }
-                              }}
-                            >
-                              <LectureInfo>
-                                <LectureIcon type={lecture.type}>
-                                  {getLectureIcon(lecture.type)}
-                                </LectureIcon>
-                                <LectureName 
-                                  completed={status === 'completed'}
-                                  locked={status === 'locked'}
-                                  style={{ fontSize: '0.8rem' }}
-                                >
-                                  {lecture.title}
-                                  {status === 'completed' && ' ✓'}
-                                  {status === 'locked' && ' 🔒'}
-                                </LectureName>
-                              </LectureInfo>
-                              <LectureStatus>
-                                <StatusIcon status={status}>
-                                  {getStatusIcon(status)}
-                                </StatusIcon>
-                              </LectureStatus>
-                            </LectureItem>
-                          );
-                        })}
-                      </LectureList>
-                    )}
-                  </AnimatePresence>
-                </SectionItem>
-              ))}
-            </div>
-          </MobileContentSection>
-        </Sidebar>
+        {/* Right Sidebar removed — layout simplified to two columns */}
       </MainContent>
 
       {/* Assignment Submission Modal */}

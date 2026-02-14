@@ -564,8 +564,8 @@ const Navbar = () => {
       <NavbarContainer scrolled={scrolled}>
         <NavInner>
           <Logo>
-            <LogoIcon>W3</LogoIcon>
-            <span>Web3Warriors</span>
+            <LogoIcon>B3</LogoIcon>
+            <span>Credentialing Platform</span>
           </Logo>
 
          
@@ -666,8 +666,8 @@ const Navbar = () => {
         <CloseButton onClick={() => setMobileMenuOpen(false)}>✕</CloseButton>
 
         <Logo>
-          <LogoIcon>W3</LogoIcon>
-          <span>Web3Warriors</span>
+          <LogoIcon>B3</LogoIcon>
+          <span>Credentialing Platform</span>
         </Logo>
 
         <MobileNavLinks>

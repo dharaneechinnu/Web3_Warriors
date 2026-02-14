@@ -146,16 +146,21 @@ const CourseDetail = () => {
               transition={{ duration: 0.6 }}
             >
               {/* Course Image */}
-              {(course.thumbnail || course.image) && (
+              {((course.thumbnail || course.image)) && (
                 <div className="relative mb-6 rounded-xl overflow-hidden">
-                  <img
-                    src={`http://localhost:3500/${(course.thumbnail || course.image)?.replace(/\\/g, '/')}`}
-                    alt={course.title}
-                    className="w-full h-64 lg:h-80 object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
+                  {(() => {
+                    const raw = (course.thumbnail || course.image) || '';
+                    const normalized = String(raw).replace(/\\/g, '/');
+                    const src = /^https?:\/\//i.test(normalized) ? normalized : `${api.defaults.baseURL}${normalized.startsWith('/') ? '' : '/'}${normalized}`;
+                    return (
+                      <img
+                        src={src}
+                        alt={course.title}
+                        className="w-full h-64 lg:h-80 object-cover"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    );
+                  })()}
                   <div className="absolute top-4 left-4">
                     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
                       course.level === 'beginner' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :

@@ -72,17 +72,6 @@ const userSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now },
     description: { type: String },
   }],
-  lectureProgress: [{
-    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
-    lectureId: { type: String, required: true },
-    sectionId: { type: String, required: true },
-    completed: { type: Boolean, default: false },
-    progress: { type: Number, default: 0 }, // percentage 0-100 for lecture completion
-    videoProgress: { type: Number, default: 0 }, // percentage 0-100 for video watched
-    watchTime: { type: Number, default: 0 }, // seconds watched
-    totalDuration: { type: Number, default: 0 }, // total video duration in seconds
-    lastAccessed: { type: Date, default: Date.now }
-  }],
   skills: [{
     type: String,
   }],
@@ -117,6 +106,19 @@ const userSchema = new mongoose.Schema({
   }],
   averageRating: { type: Number, default: 0 },
   role: { type: String, enum: ['learner', 'mentor', 'admin', 'user'], default: 'learner' },
+  
+  // Video progress tracking for learners
+  lectureProgress: [{
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true },
+    lectureId: { type: String, required: true },
+    sectionId: { type: String },
+    currentTime: { type: Number, default: 0 }, // Last watched position in seconds
+    videoProgress: { type: Number, default: 0 }, // Percentage watched (0-100)
+    completed: { type: Boolean, default: false },
+    contentType: { type: String, enum: ['video', 'quiz', 'assignment', 'article'], default: 'video' },
+    lastAccessed: { type: Date, default: Date.now },
+    completedAt: { type: Date }
+  }]
 });
 
 

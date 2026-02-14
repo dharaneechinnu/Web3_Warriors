@@ -96,19 +96,7 @@ const UdemyCourseSchema = new mongoose.Schema({
       }]
     }]
   },
-  // Progress tracking for learners
-  lectureProgress: [{
-    learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    lectureId: mongoose.Schema.Types.ObjectId,
-    sectionId: mongoose.Schema.Types.ObjectId,
-    videoProgress: { type: Number, default: 0 }, // percentage
-    completed: { type: Boolean, default: false },
-    contentType: { type: String, enum: ['video', 'quiz', 'article', 'assignment', 'resource'] },
-    completedAt: Date,
-    watchTime: { type: Number, default: 0 }, // in seconds
-    totalDuration: { type: Number, default: 0 }, // in seconds
-    lastAccessed: { type: Date, default: Date.now }
-  }],
+
   // Quiz results
   quizResults: [{
     learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -135,8 +123,7 @@ const UdemyCourseSchema = new mongoose.Schema({
     gradedAt: Date,
     gradedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }],
-  // Overall course progress for learners
-  overallProgress: { type: Number, default: 0 }, // percentage
+
   enrolledAt: { type: Date, default: Date.now },
   lastAccessed: { type: Date, default: Date.now },
   averageRating: { 
@@ -256,37 +243,7 @@ const CourseLectureSchema = new mongoose.Schema({
   }
 });
 
-// Student Progress Schema
-const StudentProgressSchema = new mongoose.Schema({
-  studentId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
-  },
-  courseId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'UdemyCourse', 
-    required: true 
-  },
-  lectureId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'CourseLecture', 
-    required: true 
-  },
-  completed: { 
-    type: Boolean, 
-    default: false 
-  },
-  videoProgress: { 
-    type: Number, 
-    default: 0 // percentage 0-100
-  },
-  lastAccessed: { 
-    type: Date, 
-    default: Date.now 
-  },
-  completedAt: Date
-});
+
 
 // Assignment Submission Schema
 const AssignmentSubmissionSchema = new mongoose.Schema({
@@ -371,10 +328,7 @@ const CourseEnrollmentSchema = new mongoose.Schema({
     default: Date.now 
   },
   completedAt: Date,
-  overallProgress: { 
-    type: Number, 
-    default: 0 
-  }, // percentage 0-100
+
   certificateIssued: { 
     type: Boolean, 
     default: false 
@@ -403,7 +357,6 @@ module.exports = {
   UdemyCourse: mongoose.model('UdemyCourse', UdemyCourseSchema),
   CourseSection: mongoose.model('CourseSection', CourseSectionSchema),
   CourseLecture: mongoose.model('CourseLecture', CourseLectureSchema),
-  StudentProgress: mongoose.model('StudentProgress', StudentProgressSchema),
   AssignmentSubmission: mongoose.model('AssignmentSubmission', AssignmentSubmissionSchema),
   CourseEnrollment: mongoose.model('CourseEnrollment', CourseEnrollmentSchema),
   CourseBookmark: mongoose.model('CourseBookmark', CourseBookmarkSchema)

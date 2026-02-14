@@ -621,27 +621,23 @@ const LearnerCourseDashboard = () => {
                     <SkillLevel level={course.skillLevel}>
                       {course.skillLevel}
                     </SkillLevel>
-                    {course.progress >= 100 && (
-                      <CompletionBadge>
-                        <FaCheckCircle />
-                        Completed
-                      </CompletionBadge>
-                    )}
+                    {/* Completion badge removed - progress tracking disabled */}
                   </div>
 
                   <ProgressSection>
                     <ProgressHeader>
-                      <ProgressText>Progress</ProgressText>
-                      <ProgressText>{Math.round(course.progress || 0)}% Complete</ProgressText>
+                      <ProgressText>Status</ProgressText>
+                      <ProgressText>Enrolled</ProgressText>
                     </ProgressHeader>
-                    <ProgressBarContainer>
-                      <ProgressBar progress={course.progress || 0} />
-                    </ProgressBarContainer>
+                      <ProgressBarContainer>
+                        {/* Show learner's course progress percentage */}
+                        <ProgressBar progress={course.overallProgress || 0} />
+                      </ProgressBarContainer>
                   </ProgressSection>
 
                   <CourseActions>
                     <ContinueButton onClick={(e) => continueLearning(course._id, e)}>
-                      {course.progress > 0 ? 'Continue Learning' : 'Start Course'}
+                      {(course.overallProgress || 0) > 0 ? `Continue (${course.overallProgress}% )` : 'Start Course'}
                     </ContinueButton>
                   </CourseActions>
                 </CourseContent>

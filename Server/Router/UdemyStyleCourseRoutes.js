@@ -4,7 +4,7 @@ const {
   UdemyCourse,
   CourseSection,
   CourseLecture,
-  StudentProgress,
+  // StudentProgress, // Progress tracking disabled
   AssignmentSubmission,
   CourseEnrollment,
   CourseBookmark,
@@ -449,22 +449,22 @@ router.post('/enroll', async (req, res) => {
       console.warn('Error checking mentor self-enroll prevention in udemy route:', err);
     }
     
-    // Check if already enrolled
-    const existingProgress = await StudentProgress.findOne({ courseId, learnerId });
-    if (existingProgress) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Already enrolled in this course' 
-      });
-    }
+    // Check if already enrolled - Progress tracking disabled
+    // const existingProgress = await StudentProgress.findOne({ courseId, learnerId });
+    // if (existingProgress) {
+    //   return res.status(403).json({ 
+    //     success: false, 
+    //     message: 'Already enrolled in this course' 
+    //   });
+    // }
     
-    // Create progress record
-    const progress = new Progress({
-      courseId,
-      learnerId,
-      progressPercentage: 0
-    });
-    await StudentProgress.save();
+    // Create progress record - Progress tracking disabled
+    // const progress = new Progress({
+    //   courseId,
+    //   learnerId,
+    //   progressPercentage: 0
+    // });
+    // await StudentProgress.save();
     
     // Add to course enrolled students
     await UdemyCourse.findByIdAndUpdate(
@@ -478,42 +478,43 @@ router.post('/enroll', async (req, res) => {
   }
 });
 
+// Progress tracking routes disabled
 // Get learner progress
-router.get('/progress/:courseId/:learnerId', async (req, res) => {
-  try {
-    const progress = await StudentProgress.findOne({
-      courseId: req.params.courseId,
-      learnerId: req.params.learnerId
-    });
-    
-    res.json({ success: true, progress });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// router.get('/progress/:courseId/:learnerId', async (req, res) => {
+//   try {
+//     const progress = await StudentProgress.findOne({
+//       courseId: req.params.courseId,
+//       learnerId: req.params.learnerId
+//     });
+//     
+//     res.json({ success: true, progress });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// });
 
 // Mark lecture as completed
-router.post('/complete-lecture', async (req, res) => {
-  try {
-    const { courseId, learnerId, lectureId } = req.body;
-    
-    const progress = await StudentProgress.findOne({ courseId, learnerId });
-    if (!StudentProgress.completedLectures.includes(lectureId)) {
-      StudentProgress.completedLectures.push(lectureId);
-      StudentProgress.lastAccessedAt = new Date();
-      
-      // Calculate progress percentage
-      const totalLectures = await CourseLecture.countDocuments({ courseId });
-      StudentProgress.progressPercentage = (StudentProgress.completedLectures.length / totalLectures) * 100;
-      
-      await StudentProgress.save();
-    }
-    
-    res.json({ success: true, progress });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// router.post('/complete-lecture', async (req, res) => {
+//   try {
+//     const { courseId, learnerId, lectureId } = req.body;
+//     
+//     const progress = await StudentProgress.findOne({ courseId, learnerId });
+//     if (!StudentProgress.completedLectures.includes(lectureId)) {
+//       StudentProgress.completedLectures.push(lectureId);
+//       StudentProgress.lastAccessedAt = new Date();
+//       
+//       // Calculate progress percentage
+//       const totalLectures = await CourseLecture.countDocuments({ courseId });
+//       StudentProgress.progressPercentage = (StudentProgress.completedLectures.length / totalLectures) * 100;
+//       
+//       await StudentProgress.save();
+//     }
+//     
+//     res.json({ success: true, progress });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// });
 
 // Submit assignment
 router.post('/submit-assignment', async (req, res) => {

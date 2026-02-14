@@ -46,7 +46,7 @@ app.use('/Auth/mentor', require('./Router/MentorAuthRouter'))
 app.use("/User",require("./Router/userRoutes"))
 app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded files
 app.use("/courses", require("./Router/courseRoutes"));
-app.use("/courses", require("./Router/CourseProgressRoutes")); // Add course progress routes
+// app.use("/courses", require("./Router/CourseProgressRoutes")); // Removed - progress tracking disabled
 app.use("/udemy-courses", require("./Router/UdemyStyleCourseRoutes")); // New Udemy-style courses
 app.use("/mentorship",require("./Router/MentorRouter"))
 
