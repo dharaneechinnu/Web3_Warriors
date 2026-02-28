@@ -113,4 +113,10 @@ router.put("/submissions/:submissionId/grade", courseController.gradeSubmission)
 // Mentor: view all learners' progress in a course
 router.get("/learner-progress/:courseId", courseController.getMentorLearnerProgress);
 
+// ============================================================
+// CERTIFICATE ROUTES
+// ============================================================
+router.post("/certificate/generate/:courseId/:userId", courseController.generateCertificate);
+router.get("/certificate/verify/:certificateId", courseController.getCertificate);
+
 module.exports = router;

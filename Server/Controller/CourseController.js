@@ -2661,7 +2661,8 @@ exports.getLearnerSubmissions = async (req, res) => {
     try {
         const { learnerId, courseId } = req.params;
         const filter = { studentId: learnerId };
-        if (courseId) filter.courseId = courseId;
+        // Only add courseId filter when it's a real ID, not "all"
+        if (courseId && courseId !== 'all') filter.courseId = courseId;
 
         const submissions = await AssignmentSubmission.find(filter).sort({ submittedAt: -1 });
         res.json({ success: true, submissions });
@@ -2834,6 +2835,102 @@ exports.getMentorLearnerProgress = async (req, res) => {
         });
     } catch (error) {
         console.error('getMentorLearnerProgress error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// CERTIFICATE GENERATION
+// ============================================================
+
+// Generate or retrieve a certificate for a completed course
+exports.generateCertificate = async (req, res) => {
+    try {
+        const { courseId, userId } = req.params;
+
+        if (!courseId || !userId) {
+            return res.status(400).json({ success: false, message: 'courseId and userId are required' });
+        }
+
+        // Check if certificate already exists
+        const existing = await CertificationModel.findOne({ userId, courseId });
+        if (existing) {
+            return res.json({ success: true, certificate: existing });
+        }
+
+        // Find course and user
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        // Verify enrollment
+        if (!user.coursesEnrolled || !user.coursesEnrolled.some(cid => cid.toString() === courseId)) {
+            return res.status(403).json({ success: false, message: 'Not enrolled in this course' });
+        }
+
+        // Verify 100% completion
+        const totalLectures = (course.curriculum?.sections || []).reduce(
+            (sum, s) => sum + (s.lectures?.length || 0), 0
+        );
+
+        // Progress is stored as a flat array on user.lectureProgress, filtered by courseId
+        const lectureProgress = user.lectureProgress
+            ? user.lectureProgress.filter(p => p.courseId?.toString() === courseId)
+            : [];
+        const completedCount = lectureProgress.filter(lp => lp.completed).length || 0;
+        const percent = totalLectures > 0 ? Math.round((completedCount / totalLectures) * 100) : 0;
+
+        if (percent < 100) {
+            return res.status(400).json({
+                success: false,
+                message: `Course is only ${percent}% complete. 100% required for certificate.`
+            });
+        }
+
+        // Find mentor
+        const mentor = await User.findById(course.mentorId);
+        const mentorName = mentor ? (mentor.name || mentor.email) : (course.mentorName || 'Instructor');
+        const learnerName = user.name || user.email || 'Learner';
+
+        // Create certificate
+        const certificate = await CertificationModel.create({
+            userId,
+            courseId,
+            courseName: course.title,
+            mentorId: course.mentorId,
+            mentorName,
+            completedDate: new Date(),
+            grade: 'Pass'
+        });
+
+        return res.status(201).json({
+            success: true,
+            certificate: {
+                ...certificate.toObject(),
+                learnerName,
+            }
+        });
+    } catch (error) {
+        console.error('generateCertificate error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Get certificate by ID (for verification)
+exports.getCertificate = async (req, res) => {
+    try {
+        const { certificateId } = req.params;
+        const cert = await CertificationModel.findOne({ certificateId })
+            .populate('userId', 'fullName userName email')
+            .populate('courseId', 'title')
+            .populate('mentorId', 'fullName userName email');
+
+        if (!cert) return res.status(404).json({ success: false, message: 'Certificate not found' });
+
+        res.json({ success: true, certificate: cert });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };

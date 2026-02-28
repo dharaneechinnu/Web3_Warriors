@@ -21,6 +21,7 @@ import {
 import api from '../../services/api';
 import { API_BASE_URL } from '../../config';
 import LectureVideoPlayer from '../../components/LectureVideoPlayer';
+import { downloadCertificate } from '../../utils/certificateGenerator';
 
 
 
@@ -1474,9 +1475,8 @@ const LearnerCourseView = () => {
       formData.append('lectureId', lectureId);
       formData.append('courseId', courseId);
       formData.append('learnerId', userId);
-      formData.append('submittedAt', new Date().toISOString());
 
-      const response = await api.post(`/courses/${courseId}/assignment/${lectureId}/submit`, formData, {
+      const response = await api.post('/courses/submit-assignment', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -1494,7 +1494,8 @@ const LearnerCourseView = () => {
       return response.data;
     } catch (error) {
       console.error('Error submitting assignment:', error);
-      return { success: false, error: error.message };
+      const msg = error.response?.data?.message || error.message;
+      return { success: false, error: msg };
     }
   };
 
@@ -1797,11 +1798,23 @@ const LearnerCourseView = () => {
                   // Call selectLecture to properly set up the lecture (including fetching content data)
                   await selectLecture(next.data, next.sectionId);
                 } else {
-                  console.log('⚠️ CLIENT: No next incomplete lecture found; staying on completed lecture');
-                  // No next incomplete found; show the completed lecture
-                  setCurrentLecture(targetLecture);
-                  setExpandedSections({ [targetSectionId]: true });
-                  setCurrentLectureCompleted(true);
+                  // Check if course is 100% complete — if so, show the certificate view
+                  const allSections = response.data.curriculum.sections;
+                  const totalLectures = allSections.reduce((t, s) => t + (s.lectures?.length || 0), 0);
+                  const completedCount = progressData.lectureProgress?.filter(p => p.completed).length || 0;
+                  const isFullyComplete = totalLectures > 0 && completedCount >= totalLectures;
+
+                  if (isFullyComplete) {
+                    console.log('🎓 CLIENT: Course is 100% complete — showing certificate view');
+                    // Don't set currentLecture so the certificate/completion UI renders
+                    setExpandedSections({ [targetSectionId]: true });
+                    setCurrentLectureCompleted(true);
+                  } else {
+                    console.log('⚠️ CLIENT: No next incomplete lecture found; staying on completed lecture');
+                    setCurrentLecture(targetLecture);
+                    setExpandedSections({ [targetSectionId]: true });
+                    setCurrentLectureCompleted(true);
+                  }
                 }
               } else {
                 // Set the lecture and prepare for resume
@@ -1831,9 +1844,19 @@ const LearnerCourseView = () => {
               selectFirstLecture(response.data.curriculum.sections);
             }
           } else {
-            // No progress or should start from beginning
-            console.log('🆕 CLIENT: Starting course from beginning');
-            selectFirstLecture(response.data.curriculum.sections);
+            // No progress or should start from beginning — but double-check completion
+            const allSections = response.data.curriculum.sections;
+            const totalLectures = allSections.reduce((t, s) => t + (s.lectures?.length || 0), 0);
+            const completedCount = progressData?.lectureProgress?.filter(p => p.completed).length || 0;
+            const isFullyComplete = totalLectures > 0 && completedCount >= totalLectures;
+
+            if (isFullyComplete) {
+              console.log('🎓 CLIENT: Course is 100% complete — showing certificate view');
+              // Don't set currentLecture so the certificate/completion UI renders
+            } else {
+              console.log('🆕 CLIENT: Starting course from beginning');
+              selectFirstLecture(response.data.curriculum.sections);
+            }
           }
         } else {
           console.log('No curriculum found in course data, adding mock curriculum for testing');
@@ -2981,7 +3004,31 @@ const LearnerCourseView = () => {
                   <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎓</div>
                   <h2>Course Completed!</h2>
                   <p style={{ opacity: 0.8, marginBottom: '2rem' }}>Congratulations on completing the entire course!</p>
-                  <ActionButton variant="success">
+                  <ActionButton
+                    variant="success"
+                    onClick={async () => {
+                      try {
+                        const userId = localStorage.getItem('userId');
+                        const res = await api.post(`/courses/certificate/generate/${courseId}/${userId}`);
+                        if (res.data.success) {
+                          const cert = res.data.certificate;
+                          downloadCertificate({
+                            learnerName: cert.learnerName || localStorage.getItem('userName') || 'Learner',
+                            courseName: cert.courseName || course?.title || 'Course',
+                            mentorName: cert.mentorName || 'Instructor',
+                            certificateId: cert.certificateId || '',
+                            completedDate: cert.completedDate || new Date().toISOString(),
+                            grade: cert.grade || 'Pass',
+                          });
+                        } else {
+                          alert(res.data.message || 'Could not generate certificate.');
+                        }
+                      } catch (err) {
+                        console.error('Certificate error:', err);
+                        alert(err.response?.data?.message || 'Failed to generate certificate. Please try again.');
+                      }
+                    }}
+                  >
                     🏆 Download Certificate
                   </ActionButton>
                 </>
@@ -3025,9 +3072,9 @@ const LearnerCourseView = () => {
                     if (e.target.files[0]) {
                       const result = await submitAssignment(currentLecture._id, e.target.files[0]);
                       if (result.success) {
-                        console.log('Assignment submitted successfully');
+                        alert('Assignment submitted successfully!');
                       } else {
-                        console.error('Assignment submission failed:', result.error);
+                        alert(result.error || 'Assignment submission failed. Please try again.');
                       }
                     }
                   }}
