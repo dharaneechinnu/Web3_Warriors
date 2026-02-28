@@ -119,12 +119,12 @@ export default function VideoRoom() {
   /* refs */
   const localRef       = useRef(null);
   const remoteRef      = useRef(null);
-  const screenRef      = useRef(null);     // for displaying incoming screen share
   const socketRef      = useRef(null);
   const pcRef          = useRef(null);     // RTCPeerConnection
   const localStream    = useRef(null);
   const screenStream   = useRef(null);     // screen capture stream
   const screenSender   = useRef(null);     // RTCRtpSender for screen track
+  const remoteStreamRef = useRef(null);    // single MediaStream for all remote tracks
   const chatEndRef     = useRef(null);
   const offerSent      = useRef(false);
   const remoteSockId   = useRef(null);
@@ -144,44 +144,42 @@ export default function VideoRoom() {
   /* ── helpers ──────────────────────────────────────────────────────────── */
   const addMsg = (msg) => setMessages(prev => [...prev, msg]);
 
+  /** Attach remoteStreamRef to the remote video element whenever ref mounts */
+  const setRemoteVideoRef = useCallback((el) => {
+    remoteRef.current = el;
+    if (el && remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current;
+    }
+  }, []);
+
   const createPC = useCallback((remoteSocketId) => {
     if (pcRef.current) return pcRef.current;
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
 
+    // Prepare a single MediaStream to collect all remote tracks
+    remoteStreamRef.current = new MediaStream();
+
     // Add local tracks
     if (localStream.current) {
       localStream.current.getTracks().forEach(t => pc.addTrack(t, localStream.current));
     }
 
-    // Remote stream — handle video + screen tracks
+    // Remote stream — simply add every incoming track to one MediaStream
     pc.ontrack = (e) => {
-      const stream = e.streams[0];
       const track = e.track;
+      console.log(`[WebRTC] ontrack: kind=${track.kind}, id=${track.id}`);
 
-      // If it's a video track labeled as screen, route to screenRef
-      if (track.kind === "video" && track.label && track.label.includes("screen")) {
-        if (screenRef.current) screenRef.current.srcObject = stream;
-        setPeerSharing(true);
-      } else if (track.kind === "video") {
-        // Could be camera or screen — check if we already have a camera stream on remoteRef
-        if (remoteRef.current) {
-          if (!remoteRef.current.srcObject) {
-            remoteRef.current.srcObject = stream;
-          } else {
-            // Second video track = screen share
-            if (screenRef.current) screenRef.current.srcObject = stream;
-            setPeerSharing(true);
-          }
-        }
-      } else {
-        // Audio track
-        if (remoteRef.current) {
-          if (!remoteRef.current.srcObject) {
-            remoteRef.current.srcObject = stream;
-          }
-        }
+      // Avoid duplicates
+      const existing = remoteStreamRef.current.getTracks().find(t => t.id === track.id);
+      if (!existing) {
+        remoteStreamRef.current.addTrack(track);
+      }
+
+      // Assign to video element (handles case where ref already mounted)
+      if (remoteRef.current) {
+        remoteRef.current.srcObject = remoteStreamRef.current;
       }
 
       setConnected(true);
@@ -288,7 +286,7 @@ export default function VideoRoom() {
         setPeerSharing(false);
         setStatus(`${n} left the call.`);
         if (remoteRef.current) remoteRef.current.srcObject = null;
-        if (screenRef.current) screenRef.current.srcObject = null;
+        remoteStreamRef.current = null;
         pcRef.current?.close();
         pcRef.current = null;
         offerSent.current = false;
@@ -314,11 +312,11 @@ export default function VideoRoom() {
 
       socket.on("peer-screen-share-stopped", () => {
         setPeerSharing(false);
-        if (screenRef.current) screenRef.current.srcObject = null;
       });
 
-      /* 12. Chat */
-      socket.on("room-message", ({ message, userName: n, timestamp }) => {
+      /* 12. Chat — ignore own messages (server broadcasts to full room) */
+      socket.on("room-message", ({ message, userName: n, timestamp, from }) => {
+        if (from === socket.id) return;  // already added locally
         addMsg({ text: message, sender: n, ts: timestamp, mine: false });
       });
     };
@@ -446,9 +444,7 @@ export default function VideoRoom() {
     setChatInput("");
   };
 
-  /* ── Layout: decide video grid ──────────────────────────────────────────── */
-  // When screen is being shared (by me or peer), show it prominently
-  const hasScreenShare = screenSharing || peerSharing;
+  /* ── Layout ──────────────────────────────────────────────────────────────── */
 
   /* ── render ───────────────────────────────────────────────────────────────── */
   return (
@@ -479,62 +475,47 @@ export default function VideoRoom() {
         {/* Video area */}
         <div style={{ flex:1, position:"relative", padding:"0.75rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 
-          {/* Main video area */}
+          {/* Main video area — always render ONE remote video element so the ref never unmounts */}
           <div style={{ flex: 1, display: "flex", gap: "0.75rem", minHeight: 0 }}>
 
-            {/* Screen share display (when peer or self is sharing) — takes majority of space */}
-            {hasScreenShare && (
-              <div style={{ ...S.videoWrap, flex: 3, position: "relative" }}>
-                {screenSharing ? (
-                  <>
-                    {/* When I'm sharing, show my screen locally too for reference */}
-                    <video
-                      ref={el => { if (el && screenStream.current) el.srcObject = screenStream.current; }}
-                      autoPlay playsInline muted
-                      style={S.screenVideo}
-                    />
-                    <div style={S.screenLabel}>{"\uD83D\uDCBB"} Your Screen</div>
-                  </>
-                ) : peerSharing ? (
-                  <>
-                    {/* Peer's camera video now shows their screen via replaceTrack */}
-                    <video ref={remoteRef} autoPlay playsInline style={S.screenVideo} />
-                    <div style={S.screenLabel}>{"\uD83D\uDCBB"} {peerName}'s Screen</div>
-                  </>
-                ) : null}
+            {/* Remote video — ALWAYS mounted */}
+            <div style={{ ...S.videoWrap, flex: 1, position: "relative" }}>
+              {connected ? (
+                <>
+                  <video
+                    ref={setRemoteVideoRef}
+                    autoPlay
+                    playsInline
+                    style={peerSharing ? S.screenVideo : S.video}
+                  />
+                  {/* Label changes based on screen share state */}
+                  {peerSharing ? (
+                    <div style={S.screenLabel}>{"\uD83D\uDCBB"} {peerName || "Peer"}'s Screen</div>
+                  ) : (
+                    peerName && <div style={S.label}>{peerName}</div>
+                  )}
+                </>
+              ) : (
+                <div style={S.waitBanner}>
+                  <div style={{ fontSize:"3rem" }}>{"\uD83D\uDCF9"}</div>
+                  <div style={{ fontWeight:600 }}>{status}</div>
+                  <div style={{ fontSize:"0.85rem" }}>Room ID: <code style={{color:"#a78bfa"}}>{roomId}</code></div>
+                  <div style={{ fontSize:"0.8rem", opacity:0.6 }}>Share this room link to invite the other participant</div>
+                </div>
+              )}
+            </div>
+
+            {/* When I'm screen-sharing, show my screen locally for reference */}
+            {screenSharing && screenStream.current && (
+              <div style={{ ...S.videoWrap, flex: 1, position: "relative" }}>
+                <video
+                  ref={el => { if (el && screenStream.current) el.srcObject = screenStream.current; }}
+                  autoPlay playsInline muted
+                  style={S.screenVideo}
+                />
+                <div style={S.screenLabel}>{"\uD83D\uDCBB"} Your Screen</div>
               </div>
             )}
-
-            {/* Camera videos */}
-            <div style={{ flex: hasScreenShare ? 1 : 1, display: "flex", flexDirection: hasScreenShare ? "column" : "row", gap: "0.75rem", minHeight: 0 }}>
-
-              {/* Remote video */}
-              <div style={{ ...S.videoWrap, flex: 1 }}>
-                {connected ? (
-                  <>
-                    {/* When peer is sharing screen, their camera feed goes through same remoteRef (it's replaced).
-                        So if peer is sharing, we don't show this as camera — it's the screen above.
-                        When neither shares, show remote camera normally. When I share, remote still shows peer camera. */}
-                    {!peerSharing ? (
-                      <video ref={remoteRef} autoPlay playsInline style={S.video} />
-                    ) : (
-                      <div style={S.waitBanner}>
-                        <div style={{ fontSize: "2rem" }}>{"\uD83D\uDCBB"}</div>
-                        <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{peerName} is sharing screen</div>
-                      </div>
-                    )}
-                    {!peerSharing && peerName && <div style={S.label}>{peerName}</div>}
-                  </>
-                ) : (
-                  <div style={S.waitBanner}>
-                    <div style={{ fontSize:"3rem" }}>{"\uD83D\uDCF9"}</div>
-                    <div style={{ fontWeight:600 }}>{status}</div>
-                    <div style={{ fontSize:"0.85rem" }}>Room ID: <code style={{color:"#a78bfa"}}>{roomId}</code></div>
-                    <div style={{ fontSize:"0.8rem", opacity:0.6 }}>Share this room link to invite the other participant</div>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Local video (PiP) */}
