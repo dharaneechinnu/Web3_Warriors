@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import styled, { keyframes, css } from "styled-components"
 import { useAuth } from "../contexts/AuthContext"
@@ -13,17 +13,17 @@ const fadeIn = keyframes`
 
 const NavbarContainer = styled.header`
   ${props => css`animation: ${fadeIn} 0.6s ease-out;`}
-  background: ${props => (props.scrolled ? 'rgba(15, 23, 42, 0.98)' : 'transparent')};
-  backdrop-filter: ${props => (props.scrolled ? 'blur(12px)' : 'none')};
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(12px);
   padding: 0;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  border-bottom: 1px solid ${props => (props.scrolled ? 'rgba(255, 255, 255, 0.08)' : 'transparent')};
-  box-shadow: ${props => (props.scrolled ? '0 6px 30px rgba(0,0,0,0.45)' : 'none')};
-  transition: background 0.25s ease, backdrop-filter 0.25s ease, box-shadow 0.25s ease, border-bottom 0.25s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.40);
+  transition: box-shadow 0.25s ease;
 `
 
 const NavInner = styled.div`
@@ -420,6 +420,83 @@ const DropdownDivider = styled.div`
   margin: 0.25rem 0;
 `
 
+// ─── Nav Dropdown ────────────────────────────────────────────────────────────
+const NavDropdown = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+`
+
+const NavDropdownTrigger = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+  font-family: inherit;
+
+  &:hover { color: white; }
+
+  svg {
+    width: 0.75rem;
+    height: 0.75rem;
+    transition: transform 0.2s ease;
+    transform: ${props => props.open ? 'rotate(180deg)' : 'rotate(0)'};
+  }
+`
+
+const NavDropdownMenu = styled.div`
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 210px;
+  background: rgba(13, 18, 35, 0.97);
+  backdrop-filter: blur(16px);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  padding: 0.5rem;
+  z-index: 999;
+  opacity: ${props => props.open ? 1 : 0};
+  visibility: ${props => props.open ? 'visible' : 'hidden'};
+  transform: translateX(-50%) ${props => props.open ? 'translateY(0)' : 'translateY(-8px)'};
+  transition: all 0.18s ease;
+`
+
+const NavDropdownItem = styled(Link)`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.9rem;
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(124, 58, 237, 0.25);
+    color: white;
+  }
+`
+
+const NavDropdownLabel = styled.div`
+  padding: 0.4rem 0.9rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.3);
+`
+
 const TokenBalance = styled.div`
   display: flex;
   align-items: center;
@@ -437,15 +514,41 @@ const TokenBalance = styled.div`
 `
 
 const Navbar = () => {
+  // ── Router & Auth hooks must come first ─────────────────────────────────
+  const { isAuthenticated, user, logout, loading } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // ── UI state ─────────────────────────────────────────────────────────────
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  
-  const { isAuthenticated, user, logout, loading } = useAuth();
-  const location = useLocation()
-  const navigate = useNavigate()
+  const [openDropdown, setOpenDropdown] = useState(null) // 'courses' | 'tools' | 'compete'
 
+  const closeDropdowns = () => setOpenDropdown(null)
+  const toggleDropdown = (name) => setOpenDropdown(prev => prev === name ? null : name)
+
+  // Close dropdown on click-outside
+  const navRef = useRef(null)
+  useEffect(() => {
+    const handler = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setOpenDropdown(null)
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Close dropdowns on route change
+  useEffect(() => {
+    setOpenDropdown(null)
+    setMobileMenuOpen(false)
+    setUserMenuOpen(false)
+  }, [location.pathname])
+  
   // Mock notifications data - replace with actual API call
   const [notifications, setNotifications] = useState([
     {
@@ -561,7 +664,7 @@ const Navbar = () => {
 
   return (
     <>
-      <NavbarContainer scrolled={scrolled}>
+      <NavbarContainer scrolled={scrolled} ref={navRef}>
         <NavInner>
           <Logo>
             <LogoIcon>B3</LogoIcon>
@@ -576,19 +679,64 @@ const Navbar = () => {
                 {userRole === 'mentor' ? (
                   <>
                     <NavLink to="/mentor-home">Home</NavLink>
-                    <NavLink to="#" onClick={(e)=>{e.preventDefault(); navigate('/course-upload')}}>Upload</NavLink>
-                    <NavLink to="/profile">Profile</NavLink>
+
+                    {/* Courses dropdown */}
+                    <NavDropdown>
+                      <NavDropdownTrigger open={openDropdown === 'courses'} onClick={() => toggleDropdown('courses')}>
+                        Courses <svg viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+                      </NavDropdownTrigger>
+                      <NavDropdownMenu open={openDropdown === 'courses'}>
+                        <NavDropdownItem to="/course-upload" onClick={closeDropdowns}>➕ Upload Course</NavDropdownItem>
+                        <NavDropdownItem to="/mentor-home" onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
+                        <NavDropdownItem to="/mentor/submissions" onClick={closeDropdowns}>📋 Review Submissions</NavDropdownItem>
+                      </NavDropdownMenu>
+                    </NavDropdown>
+
+                    {/* Tools dropdown */}
+                    <NavDropdown>
+                      <NavDropdownTrigger open={openDropdown === 'tools'} onClick={() => toggleDropdown('tools')}>
+                        Tools <svg viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+                      </NavDropdownTrigger>
+                      <NavDropdownMenu open={openDropdown === 'tools'}>
+                        <NavDropdownLabel>Manage</NavDropdownLabel>
+                        <NavDropdownItem to="/mentor/sessions" onClick={closeDropdowns}>📅 Manage Sessions</NavDropdownItem>
+                        <NavDropdownItem to="/mentor/challenges" onClick={closeDropdowns}>🏆 My Challenges</NavDropdownItem>
+                        <DropdownDivider />
+                        <NavDropdownLabel>Finance</NavDropdownLabel>
+                        <NavDropdownItem to="/wallet" onClick={closeDropdowns}>💼 Wallet</NavDropdownItem>
+                      </NavDropdownMenu>
+                    </NavDropdown>
                   </>
                 ) : (
                   <>
                     <NavLink to="/learner-home">Home</NavLink>
-                    <NavLink to="/learner-dashboard">My Courses</NavLink>
-                    <NavLink to="/courses">Browse</NavLink>
-                    <NavLink to="#" onClick={(e)=>{e.preventDefault(); navigate('/dashboard', { state: { tab: 'mentorship' } })}}>Mentorship</NavLink>
-                    <NavLink to="/profile">Profile</NavLink>
+
+                    {/* Courses dropdown */}
+                    <NavDropdown>
+                      <NavDropdownTrigger open={openDropdown === 'courses'} onClick={() => toggleDropdown('courses')}>
+                        Courses <svg viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+                      </NavDropdownTrigger>
+                      <NavDropdownMenu open={openDropdown === 'courses'}>
+                        <NavDropdownItem to="/courses" onClick={closeDropdowns}>🔍 Browse Courses</NavDropdownItem>
+                        <NavDropdownItem to="/learner-dashboard" onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
+                        <NavDropdownItem to="/submissions" onClick={closeDropdowns}>📋 My Submissions</NavDropdownItem>
+                      </NavDropdownMenu>
+                    </NavDropdown>
+
+                    {/* Compete dropdown */}
+                    <NavDropdown>
+                      <NavDropdownTrigger open={openDropdown === 'compete'} onClick={() => toggleDropdown('compete')}>
+                        Compete <svg viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+                      </NavDropdownTrigger>
+                      <NavDropdownMenu open={openDropdown === 'compete'}>
+                        <NavDropdownItem to="/challenges" onClick={closeDropdowns}>🏆 Challenges</NavDropdownItem>
+                        <NavDropdownItem to="/sessions" onClick={closeDropdowns}>📅 Book a Session</NavDropdownItem>
+                        <DropdownDivider />
+                        <NavDropdownItem to="/wallet" onClick={closeDropdowns}>💼 Wallet</NavDropdownItem>
+                      </NavDropdownMenu>
+                    </NavDropdown>
                   </>
                 )}
-                <NavLink to="#" onClick={(e)=>{e.preventDefault(); handleLogout()}}>Logout</NavLink>
               </NavLinks>
 
               <RightSection>
@@ -598,23 +746,32 @@ const Navbar = () => {
                 </NotificationButton>
 
                 <UserMenu>
-                  <UserButton onClick={() => setUserMenuOpen(!userMenuOpen)}>
-                    <UserAvatar>{userName.charAt(0)}</UserAvatar>
+                  <UserButton onClick={() => { setUserMenuOpen(!userMenuOpen); closeDropdowns(); }}>
+                    <UserAvatar>{userName.charAt(0).toUpperCase()}</UserAvatar>
                   </UserButton>
 
                   <UserDropdown isOpen={userMenuOpen}>
                     <TokenBalance>
-                      Balance: <span>{displayTokenBalance}</span> tokens
+                      🪙 <span>{displayTokenBalance}</span> tokens
                     </TokenBalance>
                     <DropdownDivider />
-                    <DropdownItem to={user.role === 'mentor' ? '/mentor-profile-dashboard' : '/learner-dashboard'}>
-                      {user.role === 'mentor' ? 'My Courses' : 'Learning Dashboard'}
-                    </DropdownItem>
-                    <DropdownItem to="/profile">Profile</DropdownItem>
+                    {userRole === 'mentor' ? (
+                      <>
+                        <DropdownItem to="/mentor/profile" onClick={() => setUserMenuOpen(false)}>👤 My Profile</DropdownItem>
+                        <DropdownItem to="/mentor/sessions" onClick={() => setUserMenuOpen(false)}>📅 Sessions</DropdownItem>
+                        <DropdownItem to="/mentor/challenges" onClick={() => setUserMenuOpen(false)}>🏆 Challenges</DropdownItem>
+                        <DropdownItem to="/mentor/submissions" onClick={() => setUserMenuOpen(false)}>📋 Submissions</DropdownItem>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownItem to="/learner/profile" onClick={() => setUserMenuOpen(false)}>👤 My Profile</DropdownItem>
+                        <DropdownItem to="/challenges" onClick={() => setUserMenuOpen(false)}>🏆 Challenges</DropdownItem>
+                        <DropdownItem to="/sessions" onClick={() => setUserMenuOpen(false)}>📅 Sessions</DropdownItem>
+                        <DropdownItem to="/submissions" onClick={() => setUserMenuOpen(false)}>📋 Submissions</DropdownItem>
+                      </>
+                    )}
                     <DropdownDivider />
-                    <DropdownItem as="button" onClick={handleLogout}>
-                      Logout
-                    </DropdownItem>
+                    <DropdownItem as="button" onClick={handleLogout} style={{width:'100%', textAlign:'left', cursor:'pointer'}}>🚪 Logout</DropdownItem>
                   </UserDropdown>
                 </UserMenu>
               </RightSection>
@@ -665,48 +822,63 @@ const Navbar = () => {
       <MobileMenu isOpen={mobileMenuOpen}>
         <CloseButton onClick={() => setMobileMenuOpen(false)}>✕</CloseButton>
 
-        <Logo>
+        <Logo to="/" style={{marginBottom: '0.5rem'}}>
           <LogoIcon>B3</LogoIcon>
           <span>Credentialing Platform</span>
         </Logo>
 
+        {isAuthenticated && (
+          <div style={{padding:'0.5rem 0.75rem', background:'rgba(124,58,237,0.15)', borderRadius:'0.5rem', marginBottom:'0.5rem', fontSize:'0.85rem', color:'rgba(255,255,255,0.7)'}}>
+            🪙 {displayTokenBalance} tokens
+          </div>
+        )}
+
         <MobileNavLinks>
-          <MobileNavLink to={isAuthenticated && userRole !== 'mentor' ? "/learner-home" : "/"} onClick={() => setMobileMenuOpen(false)}>
-            Home
-          </MobileNavLink>
-          {isAuthenticated && userRole === 'mentor' && (
+          {isAuthenticated && userRole === 'mentor' ? (
             <>
-              <MobileNavLink to="/mentor-home" onClick={() => setMobileMenuOpen(false)}>
-                Home
-              </MobileNavLink>
-              <MobileNavLink to="/course-upload" onClick={() => { setMobileMenuOpen(false); navigate('/course-upload') }}>
-                Upload
-              </MobileNavLink>
-              <MobileNavLink to="/profile" onClick={() => setMobileMenuOpen(false)}>
-                Profile
-              </MobileNavLink>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', paddingBottom:'0.25rem'}}>Main</div>
+              <MobileNavLink to="/mentor-home" onClick={() => setMobileMenuOpen(false)}>🏠 Home</MobileNavLink>
+              <MobileNavLink to="/mentor/profile" onClick={() => setMobileMenuOpen(false)}>👤 My Profile</MobileNavLink>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Courses</div>
+              <MobileNavLink to="/course-upload" onClick={() => setMobileMenuOpen(false)}>➕ Upload Course</MobileNavLink>
+              <MobileNavLink to="/mentor-home" onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
+              <MobileNavLink to="/mentor/submissions" onClick={() => setMobileMenuOpen(false)}>📋 Review Submissions</MobileNavLink>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Tools</div>
+              <MobileNavLink to="/mentor/sessions" onClick={() => setMobileMenuOpen(false)}>📅 Manage Sessions</MobileNavLink>
+              <MobileNavLink to="/mentor/challenges" onClick={() => setMobileMenuOpen(false)}>🏆 My Challenges</MobileNavLink>
+              <MobileNavLink to="/wallet" onClick={() => setMobileMenuOpen(false)}>💼 Wallet</MobileNavLink>
             </>
+          ) : isAuthenticated ? (
+            <>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', paddingBottom:'0.25rem'}}>Main</div>
+              <MobileNavLink to="/learner-home" onClick={() => setMobileMenuOpen(false)}>🏠 Home</MobileNavLink>
+              <MobileNavLink to="/learner/profile" onClick={() => setMobileMenuOpen(false)}>👤 My Profile</MobileNavLink>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Courses</div>
+              <MobileNavLink to="/courses" onClick={() => setMobileMenuOpen(false)}>🔍 Browse Courses</MobileNavLink>
+              <MobileNavLink to="/learner-dashboard" onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
+              <MobileNavLink to="/submissions" onClick={() => setMobileMenuOpen(false)}>📋 My Submissions</MobileNavLink>
+              <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Compete</div>
+              <MobileNavLink to="/challenges" onClick={() => setMobileMenuOpen(false)}>🏆 Challenges</MobileNavLink>
+              <MobileNavLink to="/sessions" onClick={() => setMobileMenuOpen(false)}>📅 Book a Session</MobileNavLink>
+              <MobileNavLink to="/wallet" onClick={() => setMobileMenuOpen(false)}>💼 Wallet</MobileNavLink>
+            </>
+          ) : (
+            <MobileNavLink to="/landingpage" onClick={() => setMobileMenuOpen(false)}>Home</MobileNavLink>
           )}
 
-          {isAuthenticated && userRole !== 'mentor' && (
+          {isAuthenticated && (
             <>
-              <MobileNavLink to="/learner-dashboard" onClick={() => setMobileMenuOpen(false)}>
-                My Courses
-              </MobileNavLink>
-              <MobileNavLink to="/courses" onClick={() => setMobileMenuOpen(false)}>
-                Browse
-              </MobileNavLink>
-              <MobileNavLink to="/dashboard" onClick={() => { setMobileMenuOpen(false); navigate('/dashboard', { state: { tab: 'mentorship' } }) }}>
-                Mentorship
-              </MobileNavLink>
-              <MobileNavLink to="/profile" onClick={() => setMobileMenuOpen(false)}>
-                Profile
+              <div style={{height:'1px', background:'rgba(255,255,255,0.1)', margin:'0.75rem 0'}} />
+              <MobileNavLink
+                as="button"
+                onClick={() => { setMobileMenuOpen(false); handleLogout(); }}
+                style={{background:'none', border:'none', textAlign:'left', cursor:'pointer', width:'100%', color:'rgba(239,68,68,0.9)', fontSize:'1.25rem', fontWeight:500, padding:'0.5rem 0'}}
+              >
+                🚪 Logout
               </MobileNavLink>
             </>
           )}
         </MobileNavLinks>
-
-       
       </MobileMenu>
     </>
   )

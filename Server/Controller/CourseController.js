@@ -3,6 +3,8 @@ const CertificationModel = require('../Model/CertificationModel');
 const path = require('path');
 const User = require("../Model/UserModel");
 const mongoose = require('mongoose');
+const { AssignmentSubmission } = require('../Model/CourseSystemModel');
+const fs = require('fs');
 
 // Helper to build absolute URL for stored paths (normalize backslashes and ensure leading slash)
 const makeAbsolute = (baseUrl, p) => {
@@ -2579,5 +2581,259 @@ exports.submitQuizAnswers = async (req, res) => {
             message: 'Failed to submit quiz',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
+    }
+};
+
+// ============================================================
+// ASSIGNMENT SUBMISSION APIs
+// ============================================================
+
+// Submit an assignment (learner)
+exports.submitAssignment = async (req, res) => {
+    try {
+        const { learnerId, courseId, lectureId, sectionId, description, submissionUrl } = req.body;
+
+        if (!learnerId || !courseId || !lectureId) {
+            return res.status(400).json({ success: false, message: 'learnerId, courseId, and lectureId are required' });
+        }
+
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+        const learner = await User.findById(learnerId);
+        if (!learner) return res.status(404).json({ success: false, message: 'Learner not found' });
+
+        // Check if enrolled
+        if (!learner.coursesEnrolled.some(cid => cid.toString() === courseId)) {
+            return res.status(403).json({ success: false, message: 'You are not enrolled in this course' });
+        }
+
+        // File upload path from multer
+        const fileUrl = req.file ? `/uploads/assignments/${req.file.filename}` : null;
+        const fileName = req.file ? req.file.originalname : null;
+        const fileSize = req.file ? req.file.size : null;
+
+        // Check for existing submission to allow resubmission
+        const existing = await AssignmentSubmission.findOne({ studentId: learnerId, lectureId, courseId });
+
+        if (existing && existing.status === 'needs_revision') {
+            // Resubmission after rejection
+            existing.description = description || existing.description;
+            existing.submissionUrl = submissionUrl || existing.submissionUrl;
+            if (fileUrl) {
+                existing.filePath = fileUrl;
+                existing.fileName = fileName;
+                existing.fileSize = fileSize;
+            }
+            existing.status = 'submitted';
+            existing.submittedAt = new Date();
+            existing.feedback = null;
+            existing.score = null;
+            await existing.save();
+            return res.json({ success: true, message: 'Resubmission received', submission: existing });
+        }
+
+        if (existing && existing.status === 'submitted') {
+            return res.status(400).json({ success: false, message: 'Assignment already submitted. Wait for review.' });
+        }
+
+        const submission = await AssignmentSubmission.create({
+            studentId: learnerId,
+            lectureId,
+            courseId,
+            fileUrl: fileUrl || submissionUrl || '',
+            fileName: fileName || '',
+            fileSize: fileSize || 0,
+            description: description || '',
+            status: 'submitted',
+            submittedAt: new Date()
+        });
+
+        res.status(201).json({ success: true, message: 'Assignment submitted successfully', submission });
+    } catch (error) {
+        console.error('submitAssignment error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Learner: get own submissions for a course
+exports.getLearnerSubmissions = async (req, res) => {
+    try {
+        const { learnerId, courseId } = req.params;
+        const filter = { studentId: learnerId };
+        if (courseId) filter.courseId = courseId;
+
+        const submissions = await AssignmentSubmission.find(filter).sort({ submittedAt: -1 });
+        res.json({ success: true, submissions });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Mentor: get all submissions for a course (optionally filtered by lectureId)
+exports.getMentorSubmissions = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { lectureId, mentorId } = req.query;
+
+        // Verify ownership
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+        if (mentorId && course.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const filter = { courseId };
+        if (lectureId) filter.lectureId = lectureId;
+
+        const submissions = await AssignmentSubmission.find(filter).sort({ submittedAt: -1 });
+
+        // Enrich with learner names
+        const enriched = await Promise.all(submissions.map(async (sub) => {
+            const learner = await User.findById(sub.studentId).select('name email');
+            return {
+                ...sub.toObject(),
+                learnerName: learner?.name || 'Unknown',
+                learnerEmail: learner?.email || ''
+            };
+        }));
+
+        res.json({ success: true, submissions: enriched, total: enriched.length });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Mentor: grade/review a submission
+exports.gradeSubmission = async (req, res) => {
+    try {
+        const { submissionId } = req.params;
+        const { mentorId, status, grade, feedback } = req.body;
+
+        if (!['graded', 'returned', 'needs_revision'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Status must be graded, returned, or needs_revision' });
+        }
+
+        const submission = await AssignmentSubmission.findById(submissionId);
+        if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
+
+        // Verify mentor owns the course
+        const course = await Course.findById(submission.courseId);
+        if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+        if (mentorId && course.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        submission.status = status;
+        submission.grade = grade;
+        submission.feedback = feedback || '';
+        submission.gradedAt = new Date();
+        submission.gradedBy = mentorId;
+        await submission.save();
+
+        // If graded/returned, award token to learner and mark lecture as complete
+        if (status === 'graded') {
+            const learner = await User.findById(submission.studentId);
+            if (learner) {
+                // Mark lecture progress as completed
+                const courseObj = await Course.findById(submission.courseId);
+                if (courseObj && learner.lectureProgress) {
+                    const lectureIdStr = submission.lectureId?.toString();
+                    const existingProgress = learner.lectureProgress.find(
+                        p => p.courseId?.toString() === submission.courseId?.toString() && p.lectureId === lectureIdStr
+                    );
+                    if (existingProgress) {
+                        existingProgress.completed = true;
+                    } else {
+                        learner.lectureProgress.push({
+                            courseId: submission.courseId,
+                            lectureId: lectureIdStr,
+                            completed: true,
+                            lastAccessed: new Date()
+                        });
+                    }
+                }
+                await learner.save();
+            }
+        }
+
+        res.json({ success: true, message: 'Submission reviewed', submission });
+    } catch (error) {
+        console.error('gradeSubmission error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// MENTOR LEARNER PROGRESS VIEW
+// ============================================================
+
+// Mentor: get all enrolled learners and their progress in a course
+exports.getMentorLearnerProgress = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { mentorId } = req.query;
+
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+        if (mentorId && course.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        // Calculate total lectures
+        let totalLectures = 0;
+        const allLectureIds = [];
+        if (course.curriculum && course.curriculum.sections) {
+            course.curriculum.sections.forEach(section => {
+                if (section.lectures) {
+                    section.lectures.forEach(lecture => {
+                        totalLectures++;
+                        allLectureIds.push(lecture._id?.toString());
+                    });
+                }
+            });
+        }
+
+        // Get all enrolled learners with their progress
+        const learnersData = await Promise.all(
+            (course.enrolledLearners || []).map(async (learnerId) => {
+                const learner = await User.findById(learnerId).select('name email lectureProgress tokenBalance');
+                if (!learner) return null;
+
+                const courseProgress = (learner.lectureProgress || []).filter(
+                    p => p.courseId?.toString() === courseId
+                );
+
+                const completedCount = courseProgress.filter(p => p.completed).length;
+                const progressPercent = totalLectures > 0 ? Math.round((completedCount / totalLectures) * 100) : 0;
+
+                const lastAccessed = courseProgress.length > 0
+                    ? courseProgress.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed))[0].lastAccessed
+                    : null;
+
+                return {
+                    learnerId: learner._id,
+                    name: learner.name,
+                    email: learner.email,
+                    completedLectures: completedCount,
+                    totalLectures,
+                    progressPercent,
+                    lastAccessed,
+                    lectureDetails: courseProgress
+                };
+            })
+        );
+
+        const valid = learnersData.filter(Boolean);
+        res.json({
+            success: true,
+            courseTitle: course.title,
+            totalEnrolled: valid.length,
+            totalLectures,
+            learners: valid
+        });
+    } catch (error) {
+        console.error('getMentorLearnerProgress error:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };

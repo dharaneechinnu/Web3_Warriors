@@ -50,6 +50,11 @@ app.use("/courses", require("./Router/courseRoutes"));
 app.use("/udemy-courses", require("./Router/UdemyStyleCourseRoutes")); // New Udemy-style courses
 app.use("/mentorship",require("./Router/MentorRouter"))
 
+// New feature routes
+app.use("/wallet", require("./Router/walletRoutes"));
+app.use("/challenges", require("./Router/ChallengeRoutes"));
+app.use("/sessions", require("./Router/SessionRoutes"));
+
 app.listen(PORT,()=>{
     console.log(`Server is running in PORT :${PORT}`);
 });

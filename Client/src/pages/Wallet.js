@@ -147,12 +147,13 @@ const Wallet = () => {
       setError(null)
 
       const token = localStorage.getItem("token")
-      const response = await api.get("/wallet", {
+      const userId = localStorage.getItem("userId")
+      const response = await api.get(`/wallet/${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-      setWallet(response.data)
+      setWallet(response.data.wallet || response.data)
     } catch (err) {
       console.error("Error fetching wallet:", err)
       setError("Failed to load wallet data")
@@ -169,7 +170,8 @@ const Wallet = () => {
       setSuccess(null)
 
       const token = localStorage.getItem("token")
-      await api.post("/wallet/transfer", transferData, {
+      const senderId = localStorage.getItem("userId")
+      await api.post("/wallet/transfer", { ...transferData, senderId }, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

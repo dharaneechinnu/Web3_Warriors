@@ -727,6 +727,77 @@ const MentorHome = () => {
             </ReputationDetails>
           </ReputationCard>
         </Section>
+
+        {/* ── Mentor Management Quick Links ── */}
+        <Section>
+          <SectionTitle>⚡ Mentor Tools</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+            <button
+              onClick={() => navigate('/mentor/sessions')}
+              style={{
+                background: 'linear-gradient(135deg, #f97316, #ef4444)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              📅 Manage Sessions
+            </button>
+            <button
+              onClick={() => navigate('/mentor/challenges')}
+              style={{
+                background: 'rgba(249, 115, 22, 0.2)',
+                color: '#fdba74',
+                border: '1px solid rgba(249, 115, 22, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              🏆 My Challenges
+            </button>
+            <button
+              onClick={() => navigate('/mentor/submissions')}
+              style={{
+                background: 'rgba(6, 182, 212, 0.2)',
+                color: '#67e8f9',
+                border: '1px solid rgba(6, 182, 212, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              📋 Review Submissions
+            </button>
+            <button
+              onClick={() => navigate('/mentor/profile')}
+              style={{
+                background: 'rgba(124, 58, 237, 0.2)',
+                color: '#c4b5fd',
+                border: '1px solid rgba(124, 58, 237, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              👤 My Profile
+            </button>
+          </div>
+        </Section>
       </Container>
     </PageContainer>
   );

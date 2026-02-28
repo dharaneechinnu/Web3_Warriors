@@ -263,6 +263,9 @@ const AssignmentSubmissionSchema = new mongoose.Schema({
     required: true 
   },
   fileUrl: String,
+  fileName: String,
+  fileSize: Number,
+  submissionUrl: String,
   description: String,
   submittedAt: { 
     type: Date, 
@@ -270,11 +273,17 @@ const AssignmentSubmissionSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['submitted', 'evaluated', 'needs_revision'],
+    enum: ['submitted', 'graded', 'returned', 'needs_revision', 'evaluated'],
     default: 'submitted'
   },
   feedback: String,
+  grade: Number,
   score: Number,
+  gradedAt: Date,
+  gradedBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User'
+  },
   evaluatedAt: Date,
   evaluatedBy: { 
     type: mongoose.Schema.Types.ObjectId, 

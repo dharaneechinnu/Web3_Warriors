@@ -22,12 +22,12 @@ const LiveSessions = () => {
       setError(null)
 
       const token = localStorage.getItem("token")
-      const response = await api.get("/sessions/getall", {
+      const response = await api.get("/sessions", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-      setSessions(response.data)
+      setSessions(response.data.sessions || response.data)
     } catch (err) {
       console.error("Error fetching sessions:", err)
       setError("Failed to load sessions")
@@ -45,11 +45,8 @@ const LiveSessions = () => {
       const userId = localStorage.getItem("userId")
 
       await api.post(
-        `/sessions/enroll`,
-        {
-          userId,
-          sessionId,
-        },
+        `/sessions/book/${sessionId}`,
+        { learnerId: userId },
         {
           headers: {
             Authorization: `Bearer ${token}`,

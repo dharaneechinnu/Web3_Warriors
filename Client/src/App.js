@@ -27,6 +27,13 @@ import VerifyMentor from './pages/mentor/Verify';
 
 // Udemy-style Course System Components
 import LearnerCourseView from './pages/learner/LearnerCourseView';
+import Challenges from './pages/learner/Challenges';
+import SubmissionStatus from './pages/learner/SubmissionStatus';
+import LearnerProfile from './pages/learner/LearnerProfile';
+import MentorChallenges from './pages/mentor/MentorChallenges';
+import SessionManagement from './pages/mentor/SessionManagement';
+import SubmissionReview from './pages/mentor/SubmissionReview';
+import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
 
 // Loading component
 const LoadingScreen = () => (
@@ -181,6 +188,31 @@ function AppRoutes() {
           <ProtectedRoute>
             <LearnerCourseView />
           </ProtectedRoute>
+        } />
+
+        {/* Learner feature routes */}
+        <Route path="/challenges" element={
+          <ProtectedRoute><Challenges /></ProtectedRoute>
+        } />
+        <Route path="/submissions" element={
+          <ProtectedRoute><SubmissionStatus /></ProtectedRoute>
+        } />
+        <Route path="/learner/profile" element={
+          <ProtectedRoute><LearnerProfile /></ProtectedRoute>
+        } />
+
+        {/* Mentor feature routes */}
+        <Route path="/mentor/challenges" element={
+          <ProtectedRoute><MentorChallenges /></ProtectedRoute>
+        } />
+        <Route path="/mentor/sessions" element={
+          <ProtectedRoute><SessionManagement /></ProtectedRoute>
+        } />
+        <Route path="/mentor/submissions" element={
+          <ProtectedRoute><SubmissionReview /></ProtectedRoute>
+        } />
+        <Route path="/mentor/profile" element={
+          <ProtectedRoute><MentorProfileDashboard /></ProtectedRoute>
         } />
 
         {/* Catch all route - redirect based on auth state */}

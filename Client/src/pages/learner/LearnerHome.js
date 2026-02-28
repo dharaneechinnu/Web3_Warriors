@@ -833,6 +833,77 @@ const LearnerHome = () => {
           </InfoText>
         </Section>
 
+        {/* ── Competitive Challenges Section ── */}
+        <Section>
+          <SectionTitle>🏆 Competitive Challenges</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+            <button
+              onClick={() => navigate('/challenges')}
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              🏆 Browse Challenges
+            </button>
+            <button
+              onClick={() => navigate('/submissions')}
+              style={{
+                background: 'rgba(99, 102, 241, 0.2)',
+                color: '#a5b4fc',
+                border: '1px solid rgba(99, 102, 241, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              📋 My Submissions
+            </button>
+            <button
+              onClick={() => navigate('/sessions')}
+              style={{
+                background: 'rgba(6, 182, 212, 0.2)',
+                color: '#67e8f9',
+                border: '1px solid rgba(6, 182, 212, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              📅 Book a Session
+            </button>
+            <button
+              onClick={() => navigate('/learner/profile')}
+              style={{
+                background: 'rgba(217, 70, 239, 0.2)',
+                color: '#f0abfc',
+                border: '1px solid rgba(217, 70, 239, 0.4)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              👤 My Profile
+            </button>
+          </div>
+        </Section>
+
       
       </Container>
     </PageContainer>

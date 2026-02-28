@@ -2,6 +2,18 @@ const express = require("express");
 const router = express.Router();
 const courseController = require("../Controller/CourseController");
 const upload = require("../MiddleWare/Upload");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+// Separate multer for assignment file submissions (no mentorId required)
+const assignmentUploadDir = path.join(__dirname, "../uploads/assignments");
+if (!fs.existsSync(assignmentUploadDir)) fs.mkdirSync(assignmentUploadDir, { recursive: true });
+const assignmentStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, assignmentUploadDir),
+    filename: (req, file, cb) => cb(null, `${Date.now()}_${file.originalname.replace(/\s/g, "_")}`),
+});
+const assignmentUpload = multer({ storage: assignmentStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 
 // Route to upload a new course
@@ -89,5 +101,16 @@ router.get("/learner/:courseId/section/:sectionId/lecture/:lectureId", courseCon
 
 // Submit quiz answers and get results
 router.post("/:courseId/section/:sectionIndex/lecture/:lectureIndex/quiz/submit", courseController.submitQuizAnswers);
+
+// ============================================================
+// ASSIGNMENT SUBMISSION ROUTES
+// ============================================================
+router.post("/submit-assignment", assignmentUpload.single('file'), courseController.submitAssignment);
+router.get("/submissions/learner/:learnerId/:courseId", courseController.getLearnerSubmissions);
+router.get("/submissions/mentor/:courseId", courseController.getMentorSubmissions);
+router.put("/submissions/:submissionId/grade", courseController.gradeSubmission);
+
+// Mentor: view all learners' progress in a course
+router.get("/learner-progress/:courseId", courseController.getMentorLearnerProgress);
 
 module.exports = router;
