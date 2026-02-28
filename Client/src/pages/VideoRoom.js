@@ -1,6 +1,5 @@
 /**
- * VideoRoom.js
- * Full WebRTC video call room with Screen Sharing using Socket.IO signaling.
+ * VideoRoom.js  –  Google Meet-inspired WebRTC video room
  * Route: /room/:roomId
  */
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -15,94 +14,47 @@ const ICE_SERVERS = {
   ],
 };
 
-/* ─── minimal inline styles ──────────────────────────────────── */
-const S = {
-  root: {
-    position: "fixed", inset: 0, background: "#0a0f1e", display: "flex",
-    flexDirection: "column", overflow: "hidden", fontFamily: "sans-serif", color: "#fff",
-  },
-  header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "0.75rem 1.25rem",
-    background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)",
-    zIndex: 10,
-  },
-  title: { fontWeight: 700, fontSize: "1rem" },
-  pill: (on) => ({
-    display: "inline-flex", alignItems: "center", gap: "0.4rem",
-    padding: "0.25rem 0.75rem", borderRadius: "2rem", fontSize: "0.78rem",
-    background: on ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
-    color: on ? "#86efac" : "#fca5a5",
-  }),
-  videos: {
-    flex: 1, display: "grid", gap: "0.75rem", padding: "0.75rem",
-    overflow: "hidden",
-  },
-  videoWrap: {
-    position: "relative", borderRadius: "0.75rem", overflow: "hidden",
-    background: "#111827", display: "flex", alignItems: "center", justifyContent: "center",
-  },
-  video: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-  screenVideo: { width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" },
-  label: {
-    position: "absolute", bottom: "0.5rem", left: "0.75rem",
-    background: "rgba(0,0,0,0.6)", padding: "0.2rem 0.6rem",
-    borderRadius: "0.5rem", fontSize: "0.75rem",
-  },
-  screenLabel: {
-    position: "absolute", top: "0.5rem", left: "0.75rem",
-    background: "rgba(124,58,237,0.8)", padding: "0.25rem 0.7rem",
-    borderRadius: "0.5rem", fontSize: "0.75rem", fontWeight: 700,
-  },
-  localWrap: {
-    position: "absolute", bottom: "1rem", right: "1rem",
-    width: 180, height: 135, borderRadius: "0.6rem", overflow: "hidden",
-    border: "2px solid rgba(124,58,237,0.6)", zIndex: 5,
-    background: "#111827",
-  },
-  controls: {
-    display: "flex", justifyContent: "center", gap: "0.75rem",
-    padding: "0.75rem 1rem", borderTop: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(255,255,255,0.03)",
-  },
-  ctrl: (active, danger) => ({
-    width: 52, height: 52, borderRadius: "50%", border: "none", cursor: "pointer",
-    fontSize: "1.3rem", display: "flex", alignItems: "center", justifyContent: "center",
-    background: danger ? "rgba(239,68,68,0.85)"
-              : active  ? "rgba(255,255,255,0.12)"
-              : "rgba(239,68,68,0.25)",
-    color: danger ? "#fff" : active ? "#fff" : "#ef4444",
-    transition: "background 0.15s",
-  }),
-  ctrlScreen: (sharing) => ({
-    width: 52, height: 52, borderRadius: "50%", border: "none", cursor: "pointer",
-    fontSize: "1.3rem", display: "flex", alignItems: "center", justifyContent: "center",
-    background: sharing ? "linear-gradient(135deg,#7c3aed,#06b6d4)" : "rgba(255,255,255,0.12)",
-    color: "#fff", transition: "background 0.15s",
-    boxShadow: sharing ? "0 0 15px rgba(124,58,237,0.5)" : "none",
-  }),
-  chat: {
-    width: 300, display: "flex", flexDirection: "column",
-    borderLeft: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(0,0,0,0.3)",
-  },
-  chatMessages: { flex: 1, overflowY: "auto", padding: "0.75rem", fontSize: "0.82rem" },
-  chatMsg: (mine) => ({
-    marginBottom: "0.6rem", textAlign: mine ? "right" : "left",
-  }),
-  chatBubble: (mine) => ({
-    display: "inline-block", padding: "0.4rem 0.75rem", borderRadius: "0.75rem",
-    background: mine ? "rgba(124,58,237,0.6)" : "rgba(255,255,255,0.1)",
-    maxWidth: "80%", wordBreak: "break-word",
-  }),
-  chatInput: {
-    display: "flex", borderTop: "1px solid rgba(255,255,255,0.08)",
-    padding: "0.5rem", gap: "0.4rem",
-  },
-  waitBanner: {
-    flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-    justifyContent: "center", gap: "1rem", color: "#94a3b8",
-  },
+/* ─── SVG Icon components ─────────────────────────────────────── */
+const Icon = {
+  Mic:       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
+  MicOff:    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.49-.35 2.17"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
+  Video:     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>,
+  VideoOff:  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+  Screen:    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+  ScreenOff: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="2" y1="2" x2="22" y2="22" stroke="#ef4444" strokeWidth="2.5"/></svg>,
+  Phone:     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 2.59 3.4Z"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2.5"/></svg>,
+  Chat:      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  Send:      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
+  People:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  Copy:      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+  Info:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+};
+
+/* ─── helper: get initials ────────────────────────────────────── */
+const getInitials = (name) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+};
+
+/* ─── helper: random avatar color from name ──────────────────── */
+const avatarColors = ["#1e88e5","#e53935","#43a047","#fb8c00","#8e24aa","#00acc1","#6d4c41","#546e7a"];
+const getAvatarColor = (name) => {
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return avatarColors[Math.abs(h) % avatarColors.length];
+};
+
+/* ─── helper: format clock ───────────────────────────────────── */
+const useClock = () => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
 /* ═══════════════════════════════════ component ═══════════════════════════ */
@@ -110,6 +62,7 @@ export default function VideoRoom() {
   const { roomId }     = useParams();
   const { state }      = useLocation();
   const navigate       = useNavigate();
+  const clock          = useClock();
 
   const userId   = localStorage.getItem("userId");
   const userName = state?.userName || localStorage.getItem("userName") || "You";
@@ -130,6 +83,7 @@ export default function VideoRoom() {
   const remoteSockId   = useRef(null);
 
   /* state */
+  const [joined, setJoined]               = useState(false);       // lobby → in-call
   const [connected, setConnected]         = useState(false);
   const [videoOn, setVideoOn]             = useState(true);
   const [audioOn, setAudioOn]             = useState(true);
@@ -140,6 +94,7 @@ export default function VideoRoom() {
   const [peerName, setPeerName]           = useState("");
   const [screenSharing, setScreenSharing] = useState(false);       // am I sharing?
   const [peerSharing, setPeerSharing]     = useState(false);       // is peer sharing?
+  const [cameraReady, setCameraReady]     = useState(false);       // camera acquired?
 
   /* ── helpers ──────────────────────────────────────────────────────────── */
   const addMsg = (msg) => setMessages(prev => [...prev, msg]);
@@ -149,11 +104,29 @@ export default function VideoRoom() {
     remoteRef.current = el;
     if (el && remoteStreamRef.current) {
       el.srcObject = remoteStreamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
+
+  /** Attach localStream to the local video element whenever ref mounts/changes */
+  const setLocalVideoRef = useCallback((el) => {
+    localRef.current = el;
+    if (el && localStream.current) {
+      el.srcObject = localStream.current;
+      el.play().catch(() => {});
     }
   }, []);
 
   const createPC = useCallback((remoteSocketId) => {
-    if (pcRef.current) return pcRef.current;
+    // If existing PC is still open and usable, return it
+    if (pcRef.current && pcRef.current.signalingState !== "closed") {
+      return pcRef.current;
+    }
+    // Close stale connection if it exists
+    if (pcRef.current) {
+      try { pcRef.current.close(); } catch (_) {}
+      pcRef.current = null;
+    }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
@@ -180,10 +153,19 @@ export default function VideoRoom() {
       // Assign to video element (handles case where ref already mounted)
       if (remoteRef.current) {
         remoteRef.current.srcObject = remoteStreamRef.current;
+        remoteRef.current.play().catch(() => {});
       }
 
       setConnected(true);
       setStatus("Connected");
+
+      // Safety: retry after React re-render mounts the video element
+      setTimeout(() => {
+        if (remoteRef.current && remoteStreamRef.current) {
+          remoteRef.current.srcObject = remoteStreamRef.current;
+          remoteRef.current.play().catch(() => {});
+        }
+      }, 200);
     };
 
     // ICE candidates
@@ -205,123 +187,155 @@ export default function VideoRoom() {
     return pc;
   }, [roomId]);
 
-  /* ── Main setup ─────────────────────────────────────────────────────────── */
+  /* ── Phase 1: Lobby — acquire camera only (no socket) ────────────────── */
   useEffect(() => {
-    let socket;
-
-    const start = async () => {
-      /* 1. Get local media */
+    let cancelled = false;
+    const getCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         localStream.current = stream;
         if (localRef.current) localRef.current.srcObject = stream;
+        setCameraReady(true);
       } catch (err) {
         console.warn("Camera/mic not available:", err.message);
-        setStatus("Camera unavailable \u2014 audio only");
+        setCameraReady(true); // still allow joining without camera
       }
+    };
+    getCamera();
+    return () => {
+      cancelled = true;
+      // Only stop camera if we never joined (cleanup on unmount from lobby)
+      if (!joined) {
+        localStream.current?.getTracks().forEach(t => t.stop());
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      /* 2. Connect Socket.IO */
-      socket = io(SOCKET_URL, { transports: ["websocket"] });
-      socketRef.current = socket;
+  /* ── Phase 2: In-call — connect socket + WebRTC after user clicks Join ── */
+  useEffect(() => {
+    if (!joined) return;
+    let socket;
 
-      socket.on("connect", () => {
-        setStatus("Connected to server. Waiting for peer\u2026");
-        socket.emit("join-room", { roomId, userId, userName, role });
-      });
+    /* Connect Socket.IO */
+    socket = io(SOCKET_URL, { transports: ["websocket"] });
+    socketRef.current = socket;
 
-      /* 3. Someone already in room \u2192 I am the offerer */
-      socket.on("room-users", async (others) => {
-        if (!others.length) return;
-        const other = others[0];
-        remoteSockId.current = other.socketId;
-        setPeerName(other.userName);
-        setStatus(`${other.userName} is already here. Connecting\u2026`);
-        offerSent.current = true;
+    socket.on("connect", () => {
+      setStatus("Connected to server. Waiting for peer\u2026");
+      socket.emit("join-room", { roomId, userId, userName, role });
+    });
 
+    /* 3. Someone already in room → I am the offerer */
+    socket.on("room-users", async (others) => {
+      if (!others.length) return;
+      const other = others[0];
+      remoteSockId.current = other.socketId;
+      setPeerName(other.userName);
+      setStatus(`${other.userName} is already here. Connecting\u2026`);
+      offerSent.current = true;
+
+      try {
         const pc = createPC(other.socketId);
+        if (pc.signalingState === "closed") return;
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit("offer", { roomId, offer, to: other.socketId });
-      });
+      } catch (err) {
+        console.warn("Failed to create offer:", err.message);
+      }
+    });
 
-      /* 4. New peer arrived \u2192 wait for offer */
-      socket.on("user-connected", ({ socketId, userName: n }) => {
-        remoteSockId.current = socketId;
-        setPeerName(n);
-        setStatus(`${n} joined. Connecting\u2026`);
-        createPC(socketId);
-      });
+    /* 4. New peer arrived → wait for offer */
+    socket.on("user-connected", ({ socketId, userName: n }) => {
+      remoteSockId.current = socketId;
+      setPeerName(n);
+      setStatus(`${n} joined. Connecting\u2026`);
+      createPC(socketId);
+    });
 
-      /* 5. Receive offer \u2192 answer */
-      socket.on("offer", async ({ offer, from }) => {
-        if (offerSent.current) return;
-        remoteSockId.current = from;
+    /* 5. Receive offer → answer */
+    socket.on("offer", async ({ offer, from }) => {
+      if (offerSent.current) return;
+      remoteSockId.current = from;
+      try {
         const pc = createPC(from);
+        if (pc.signalingState === "closed") return;
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("answer", { roomId, answer, to: from });
-      });
+      } catch (err) {
+        console.warn("Failed to handle offer:", err.message);
+      }
+    });
 
-      /* 6. Receive answer */
-      socket.on("answer", async ({ answer }) => {
+    /* 6. Receive answer */
+    socket.on("answer", async ({ answer }) => {
+      const pc = pcRef.current;
+      if (pc && pc.signalingState !== "stable") {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    });
+
+    /* 7. ICE candidates */
+    socket.on("ice-candidate", async ({ candidate }) => {
+      try {
         const pc = pcRef.current;
-        if (pc && pc.signalingState !== "stable") {
-          await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-      });
+        if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (_) {}
+    });
 
-      /* 7. ICE candidates */
-      socket.on("ice-candidate", async ({ candidate }) => {
-        try {
-          const pc = pcRef.current;
-          if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (_) {}
-      });
+    /* 8. Peer disconnected */
+    socket.on("user-disconnected", ({ userName: n }) => {
+      setConnected(false);
+      setPeerName("");
+      setPeerSharing(false);
+      setStatus(`${n} left the call.`);
+      if (remoteRef.current) remoteRef.current.srcObject = null;
+      remoteStreamRef.current = null;
+      pcRef.current?.close();
+      pcRef.current = null;
+      offerSent.current = false;
+    });
 
-      /* 8. Peer disconnected */
-      socket.on("user-disconnected", ({ userName: n }) => {
-        setConnected(false);
-        setPeerName("");
-        setPeerSharing(false);
-        setStatus(`${n} left the call.`);
-        if (remoteRef.current) remoteRef.current.srcObject = null;
-        remoteStreamRef.current = null;
-        pcRef.current?.close();
+    /* 9. Peer ended call */
+    socket.on("call-ended", () => {
+      setConnected(false);
+      setPeerName("");
+      setPeerSharing(false);
+      setStatus("Call ended by peer.");
+      if (remoteRef.current) remoteRef.current.srcObject = null;
+      remoteStreamRef.current = null;
+      if (pcRef.current) {
+        try { pcRef.current.close(); } catch (_) {}
         pcRef.current = null;
-        offerSent.current = false;
-      });
+      }
+      offerSent.current = false;
+    });
 
-      /* 9. Peer ended call */
-      socket.on("call-ended", () => {
-        setStatus("Call ended by peer.");
-        setConnected(false);
-      });
+    /* 10. Peer media toggles */
+    socket.on("peer-video-toggle", ({ enabled }) => {
+      if (remoteRef.current?.srcObject) {
+        remoteRef.current.srcObject.getVideoTracks().forEach(t => { t.enabled = enabled; });
+      }
+    });
 
-      /* 10. Peer media toggles */
-      socket.on("peer-video-toggle", ({ enabled }) => {
-        if (remoteRef.current?.srcObject) {
-          remoteRef.current.srcObject.getVideoTracks().forEach(t => { t.enabled = enabled; });
-        }
-      });
+    /* 11. Peer screen share signals */
+    socket.on("peer-screen-share-started", () => {
+      setPeerSharing(true);
+    });
 
-      /* 11. Peer screen share signals */
-      socket.on("peer-screen-share-started", () => {
-        setPeerSharing(true);
-      });
+    socket.on("peer-screen-share-stopped", () => {
+      setPeerSharing(false);
+    });
 
-      socket.on("peer-screen-share-stopped", () => {
-        setPeerSharing(false);
-      });
-
-      /* 12. Chat — ignore own messages (server broadcasts to full room) */
-      socket.on("room-message", ({ message, userName: n, timestamp, from }) => {
-        if (from === socket.id) return;  // already added locally
-        addMsg({ text: message, sender: n, ts: timestamp, mine: false });
-      });
-    };
-
-    start();
+    /* 12. Chat — ignore own messages (server broadcasts to full room) */
+    socket.on("room-message", ({ message, userName: n, timestamp, from }) => {
+      if (from === socket.id) return;  // already added locally
+      addMsg({ text: message, sender: n, ts: timestamp, mine: false });
+    });
 
     return () => {
       localStream.current?.getTracks().forEach(t => t.stop());
@@ -329,14 +343,27 @@ export default function VideoRoom() {
       pcRef.current?.close();
       socket?.disconnect();
     };
-  }, [roomId, userId, userName, role, createPC]);
+  }, [joined, roomId, userId, userName, role, createPC]);
 
   /* scroll chat to bottom */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /* Safety net: re-assign remote srcObject when connected view mounts */
+  useEffect(() => {
+    if (connected && remoteRef.current && remoteStreamRef.current) {
+      remoteRef.current.srcObject = remoteStreamRef.current;
+      remoteRef.current.play().catch(() => {});
+    }
+  }, [connected]);
+
   /* ── controls ────────────────────────────────────────────────────────────── */
+  const handleJoinNow = () => {
+    setJoined(true);
+    setStatus("Connecting\u2026");
+  };
+
   const toggleVideo = () => {
     if (!localStream.current) return;
     const enabled = !videoOn;
@@ -431,7 +458,19 @@ export default function VideoRoom() {
   const endCall = () => {
     // Stop screen share if active
     if (screenSharing) stopScreenShare();
+
+    // Clean up peer connection
+    if (pcRef.current) {
+      try { pcRef.current.close(); } catch (_) {}
+      pcRef.current = null;
+    }
+
+    // Stop all local tracks
+    localStream.current?.getTracks().forEach(t => t.stop());
+    screenStream.current?.getTracks().forEach(t => t.stop());
+
     socketRef.current?.emit("end-call", { roomId });
+    socketRef.current?.disconnect();
     navigate(-1);
   };
 
@@ -445,140 +484,742 @@ export default function VideoRoom() {
   };
 
   /* ── Layout ──────────────────────────────────────────────────────────────── */
+  const [hovered, setHovered] = useState(null); // control button hover
+  const [copied, setCopied]   = useState(false);
+
+  const copyRoomId = () => {
+    navigator.clipboard?.writeText(roomId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  /* avatar component for when video is off */
+  const Avatar = ({ name, size = 96 }) => (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: getAvatarColor(name), display: "flex",
+      alignItems: "center", justifyContent: "center",
+      fontSize: size * 0.38, fontWeight: 600, color: "#fff",
+      letterSpacing: 1, userSelect: "none",
+    }}>
+      {getInitials(name)}
+    </div>
+  );
 
   /* ── render ───────────────────────────────────────────────────────────────── */
-  return (
-    <div style={S.root}>
-      {/* Header */}
-      <div style={S.header}>
-        <div>
-          <div style={S.title}>{"\uD83C\uDFA5"} {session.title || `Room: ${roomId.slice(0, 8)}\u2026`}</div>
-          <div style={{ fontSize:"0.75rem", color:"#94a3b8", marginTop:"0.1rem" }}>
-            {session.duration && `\u23F1 ${session.duration} min`}
-            {screenSharing && <span style={{ marginLeft: "0.75rem", color: "#a78bfa", fontWeight: 700 }}>{"\uD83D\uDCBB"} You are sharing your screen</span>}
-            {peerSharing && !screenSharing && <span style={{ marginLeft: "0.75rem", color: "#06b6d4", fontWeight: 700 }}>{"\uD83D\uDCBB"} {peerName || "Peer"} is sharing their screen</span>}
+
+  /* ═══════════════════  LOBBY (pre-join)  ═══════════════════════════════════ */
+  if (!joined) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0,
+        background: "#202124",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        fontFamily: "'Google Sans', 'Segoe UI', Roboto, sans-serif",
+        color: "#e8eaed",
+      }}>
+        {/* Logo / title */}
+        <div style={{
+          position: "absolute", top: 24, left: 32,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: "50%",
+            background: "linear-gradient(135deg, #8ab4f8, #4285f4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            {Icon.Video}
+          </div>
+          <span style={{ fontSize: 20, fontWeight: 500 }}>Meeting</span>
+        </div>
+
+        {/* Main lobby layout — preview + join info side by side */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 64,
+          maxWidth: 960, width: "100%", padding: "0 32px",
+        }}>
+          {/* Left — Camera preview card */}
+          <div style={{
+            flex: "0 0 540px", height: 380,
+            borderRadius: 16, overflow: "hidden",
+            background: "#3c4043", position: "relative",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }}>
+            {videoOn && localStream.current ? (
+              <video
+                ref={setLocalVideoRef}
+                autoPlay muted playsInline
+                style={{
+                  width: "100%", height: "100%",
+                  objectFit: "cover", display: "block",
+                  transform: "scaleX(-1)",
+                }}
+              />
+            ) : (
+              <div style={{
+                width: "100%", height: "100%",
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 12,
+                background: "#3c4043",
+              }}>
+                <Avatar name={userName} size={96} />
+                {!cameraReady && (
+                  <div style={{ fontSize: 13, color: "#9aa0a6" }}>Setting up camera…</div>
+                )}
+              </div>
+            )}
+
+            {/* Overlay controls on preview */}
+            <div style={{
+              position: "absolute", bottom: 16, left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex", gap: 12,
+            }}>
+              <button
+                onClick={toggleAudio}
+                title={audioOn ? "Turn off microphone" : "Turn on microphone"}
+                style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  background: audioOn ? "rgba(60,64,67,0.9)" : "#ea4335",
+                  border: "none", cursor: "pointer", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  backdropFilter: "blur(8px)",
+                  transition: "background 0.2s",
+                }}
+              >
+                {audioOn ? Icon.Mic : Icon.MicOff}
+              </button>
+              <button
+                onClick={toggleVideo}
+                title={videoOn ? "Turn off camera" : "Turn on camera"}
+                style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  background: videoOn ? "rgba(60,64,67,0.9)" : "#ea4335",
+                  border: "none", cursor: "pointer", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  backdropFilter: "blur(8px)",
+                  transition: "background 0.2s",
+                }}
+              >
+                {videoOn ? Icon.Video : Icon.VideoOff}
+              </button>
+            </div>
+
+            {/* Name tag */}
+            <div style={{
+              position: "absolute", top: 16, left: 16,
+              background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+              padding: "4px 12px", borderRadius: 6,
+              fontSize: 13, fontWeight: 500,
+            }}>
+              {userName}
+            </div>
+          </div>
+
+          {/* Right — Join info */}
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 20, textAlign: "center",
+          }}>
+            <div style={{ fontSize: 28, fontWeight: 400, lineHeight: 1.3 }}>
+              Ready to join?
+            </div>
+            <div style={{ fontSize: 15, color: "#9aa0a6", lineHeight: 1.5, maxWidth: 300 }}>
+              {session.title
+                ? <>Joining: <span style={{ color: "#e8eaed", fontWeight: 500 }}>{session.title}</span></>
+                : "No one else is here yet"
+              }
+            </div>
+
+            {/* Join button */}
+            <button
+              onClick={handleJoinNow}
+              style={{
+                background: "#1a73e8",
+                border: "none", borderRadius: 24,
+                padding: "14px 48px",
+                fontSize: 16, fontWeight: 500,
+                color: "#fff", cursor: "pointer",
+                transition: "background 0.2s, transform 0.1s",
+                display: "flex", alignItems: "center", gap: 10,
+                boxShadow: "0 2px 8px rgba(26,115,232,0.3)",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#1557b0"; e.currentTarget.style.transform = "scale(1.02)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "#1a73e8"; e.currentTarget.style.transform = "scale(1)"; }}
+            >
+              Join now
+            </button>
+
+            {/* Room ID row */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "#303134", borderRadius: 8,
+              padding: "10px 18px", fontSize: 13, color: "#9aa0a6",
+              marginTop: 8,
+            }}>
+              <span>Room:</span>
+              <code style={{ color: "#8ab4f8", fontFamily: "'Roboto Mono', monospace", fontSize: 13, letterSpacing: 0.5 }}>
+                {roomId.length > 16 ? roomId.slice(0, 16) + "…" : roomId}
+              </code>
+              <button
+                onClick={copyRoomId}
+                style={{
+                  background: "none", border: "none",
+                  color: "#8ab4f8", cursor: "pointer",
+                  display: "flex", alignItems: "center", padding: 4,
+                  borderRadius: 4,
+                }}
+                title="Copy room ID"
+              >
+                {copied ? <span style={{ fontSize: 11, color: "#81c995" }}>Copied!</span> : Icon.Copy}
+              </button>
+            </div>
+
+            {/* Back button */}
+            <button
+              onClick={() => {
+                localStream.current?.getTracks().forEach(t => t.stop());
+                navigate(-1);
+              }}
+              style={{
+                background: "none", border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 24, padding: "10px 32px",
+                fontSize: 14, color: "#9aa0a6", cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; e.currentTarget.style.color = "#e8eaed"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "#9aa0a6"; }}
+            >
+              Go back
+            </button>
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
-          <span style={S.pill(connected)}>{connected ? `\uD83D\uDFE2 ${peerName || "Peer"} connected` : `\u23F3 ${status}`}</span>
+
+        {/* Bottom info */}
+        <div style={{
+          position: "absolute", bottom: 24,
+          fontSize: 12, color: "#5f6368", textAlign: "center",
+        }}>
+          Your mic and camera can be toggled before or during the call
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════════════════  IN-CALL  ════════════════════════════════════════════ */
+  return (
+    <div style={{
+      position: "fixed", inset: 0,
+      background: "#202124",
+      display: "flex", flexDirection: "column",
+      overflow: "hidden",
+      fontFamily: "'Google Sans', 'Segoe UI', Roboto, sans-serif",
+      color: "#e8eaed",
+    }}>
+
+      {/* ─── Top bar ──────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 16px", height: 56,
+        background: "#202124",
+        zIndex: 20,
+      }}>
+        {/* Left — room info */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%",
+            background: "linear-gradient(135deg, #8ab4f8, #4285f4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 16, fontWeight: 700,
+          }}>
+            {Icon.Video}
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.3 }}>
+              {session.title || "Meeting"}
+            </div>
+            <div style={{ fontSize: 12, color: "#9aa0a6", display: "flex", alignItems: "center", gap: 6 }}>
+              <span>{clock}</span>
+              <span style={{ opacity: 0.3 }}>|</span>
+              <span
+                onClick={copyRoomId}
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                title="Click to copy room ID"
+              >
+                {roomId.slice(0, 10)}…
+                {copied
+                  ? <span style={{ color: "#81c995", fontSize: 11 }}>Copied!</span>
+                  : Icon.Copy
+                }
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Center — status / screen share indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {screenSharing && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "#1a73e8", borderRadius: 20,
+              padding: "4px 14px", fontSize: 13, fontWeight: 500,
+            }}>
+              {Icon.Screen} <span>You are presenting</span>
+            </div>
+          )}
+          {peerSharing && !screenSharing && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "#137333", borderRadius: 20,
+              padding: "4px 14px", fontSize: 13, fontWeight: 500,
+            }}>
+              {Icon.Screen} <span>{peerName || "Peer"} is presenting</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right — participant count + chat toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "rgba(255,255,255,0.08)", borderRadius: 20,
+            padding: "6px 14px", fontSize: 13, color: "#e8eaed",
+          }}>
+            {Icon.People}
+            <span>{connected ? 2 : 1}</span>
+          </div>
           <button
             onClick={() => setChatOpen(o => !o)}
-            style={{ background:"rgba(255,255,255,0.08)", border:"none", color:"#fff",
-                     padding:"0.35rem 0.85rem", borderRadius:"0.5rem", cursor:"pointer", fontSize:"0.85rem" }}>
-            {"\uD83D\uDCAC"} Chat {messages.filter(m=>!m.mine).length > 0 && `(${messages.filter(m=>!m.mine).length})`}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: chatOpen ? "rgba(138,180,248,0.15)" : "rgba(255,255,255,0.08)",
+              border: "none", borderRadius: 20,
+              padding: "6px 14px", fontSize: 13,
+              color: chatOpen ? "#8ab4f8" : "#e8eaed",
+              cursor: "pointer", transition: "all 0.2s",
+              position: "relative",
+            }}
+          >
+            {Icon.Chat}
+            <span>Chat</span>
+            {messages.filter(m => !m.mine).length > 0 && (
+              <span style={{
+                position: "absolute", top: -4, right: -4,
+                width: 20, height: 20, borderRadius: "50%",
+                background: "#ea4335", fontSize: 11, fontWeight: 600,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {messages.filter(m => !m.mine).length}
+              </span>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Body */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        {/* Video area */}
-        <div style={{ flex:1, position:"relative", padding:"0.75rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      {/* ─── Body ─────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-          {/* Main video area — always render ONE remote video element so the ref never unmounts */}
-          <div style={{ flex: 1, display: "flex", gap: "0.75rem", minHeight: 0 }}>
-
-            {/* Remote video — ALWAYS mounted */}
-            <div style={{ ...S.videoWrap, flex: 1, position: "relative" }}>
-              {connected ? (
-                <>
+        {/* ─── Video area ─── */}
+        <div style={{
+          flex: 1, position: "relative",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "8px 8px 80px 8px", // extra bottom for floating controls
+          background: "#202124",
+        }}>
+          {connected ? (
+            <>
+              {/* Main video grid */}
+              <div style={{
+                width: "100%", height: "100%",
+                display: "flex", gap: 8,
+                alignItems: "stretch",
+              }}>
+                {/* Remote video — always mounted */}
+                <div style={{
+                  flex: 1, position: "relative",
+                  borderRadius: 12, overflow: "hidden",
+                  background: "#3c4043",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
                   <video
                     ref={setRemoteVideoRef}
-                    autoPlay
-                    playsInline
-                    style={peerSharing ? S.screenVideo : S.video}
+                    autoPlay playsInline
+                    style={{
+                      width: "100%", height: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                      background: "#3c4043",
+                    }}
                   />
-                  {/* Label changes based on screen share state */}
-                  {peerSharing ? (
-                    <div style={S.screenLabel}>{"\uD83D\uDCBB"} {peerName || "Peer"}'s Screen</div>
-                  ) : (
-                    peerName && <div style={S.label}>{peerName}</div>
-                  )}
-                </>
-              ) : (
-                <div style={S.waitBanner}>
-                  <div style={{ fontSize:"3rem" }}>{"\uD83D\uDCF9"}</div>
-                  <div style={{ fontWeight:600 }}>{status}</div>
-                  <div style={{ fontSize:"0.85rem" }}>Room ID: <code style={{color:"#a78bfa"}}>{roomId}</code></div>
-                  <div style={{ fontSize:"0.8rem", opacity:0.6 }}>Share this room link to invite the other participant</div>
+                  {/* Name label */}
+                  <div style={{
+                    position: "absolute", bottom: 12, left: 12,
+                    background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+                    padding: "4px 12px", borderRadius: 6,
+                    fontSize: 13, fontWeight: 500, display: "flex",
+                    alignItems: "center", gap: 6,
+                  }}>
+                    {peerSharing && (
+                      <span style={{ color: "#8ab4f8" }}>{Icon.Screen}</span>
+                    )}
+                    {peerName || "Participant"}
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* When I'm screen-sharing, show my screen locally for reference */}
-            {screenSharing && screenStream.current && (
-              <div style={{ ...S.videoWrap, flex: 1, position: "relative" }}>
-                <video
-                  ref={el => { if (el && screenStream.current) el.srcObject = screenStream.current; }}
-                  autoPlay playsInline muted
-                  style={S.screenVideo}
-                />
-                <div style={S.screenLabel}>{"\uD83D\uDCBB"} Your Screen</div>
+                {/* My screen share preview (if I'm sharing) */}
+                {screenSharing && screenStream.current && (
+                  <div style={{
+                    flex: 1, position: "relative",
+                    borderRadius: 12, overflow: "hidden",
+                    background: "#3c4043",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <video
+                      ref={el => { if (el && screenStream.current) el.srcObject = screenStream.current; }}
+                      autoPlay playsInline muted
+                      style={{
+                        width: "100%", height: "100%",
+                        objectFit: "contain", display: "block",
+                        background: "#202124",
+                      }}
+                    />
+                    <div style={{
+                      position: "absolute", bottom: 12, left: 12,
+                      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+                      padding: "4px 12px", borderRadius: 6,
+                      fontSize: 13, fontWeight: 500, display: "flex",
+                      alignItems: "center", gap: 6,
+                    }}>
+                      <span style={{ color: "#8ab4f8" }}>{Icon.Screen}</span>
+                      Your screen
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Local video (PiP) */}
-          <div style={S.localWrap}>
-            <video ref={localRef} autoPlay muted playsInline style={S.video} />
-            <div style={S.label}>You{screenSharing ? " (sharing)" : ""}</div>
-          </div>
+              {/* Local PiP */}
+              <div style={{
+                position: "absolute",
+                top: 16, right: chatOpen ? 376 : 16,
+                width: 200, height: 150,
+                borderRadius: 12, overflow: "hidden",
+                background: "#3c4043",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                transition: "right 0.3s ease",
+                zIndex: 10, cursor: "move",
+              }}>
+                {videoOn ? (
+                  <video ref={setLocalVideoRef} autoPlay muted playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", transform: "scaleX(-1)" }} />
+                ) : (
+                  <div style={{
+                    width: "100%", height: "100%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "#3c4043",
+                  }}>
+                    <Avatar name={userName} size={56} />
+                  </div>
+                )}
+                <div style={{
+                  position: "absolute", bottom: 8, left: 8,
+                  background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+                  padding: "2px 10px", borderRadius: 6,
+                  fontSize: 12, fontWeight: 500,
+                }}>
+                  You {screenSharing ? "(presenting)" : ""}
+                </div>
+                {/* Mic indicator dot */}
+                <div style={{
+                  position: "absolute", bottom: 8, right: 8,
+                  width: 24, height: 24, borderRadius: "50%",
+                  background: audioOn ? "rgba(0,0,0,0.5)" : "#ea4335",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke={audioOn ? "#81c995" : "#fff"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {audioOn ? (
+                      <>
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      </>
+                    ) : (
+                      <>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6"/>
+                      </>
+                    )}
+                  </svg>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ─── Waiting for peer (already joined, socket connected) ─── */
+            <div style={{
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: 20, textAlign: "center", width: "100%", height: "100%",
+            }}>
+              {/* Large self-view */}
+              <div style={{
+                width: "100%", maxWidth: 640, height: "60%", maxHeight: 400,
+                borderRadius: 12, overflow: "hidden",
+                background: "#3c4043", position: "relative",
+              }}>
+                {videoOn ? (
+                  <video ref={setLocalVideoRef} autoPlay muted playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", transform: "scaleX(-1)" }} />
+                ) : (
+                  <div style={{
+                    width: "100%", height: "100%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Avatar name={userName} size={96} />
+                  </div>
+                )}
+                <div style={{
+                  position: "absolute", bottom: 12, left: 12,
+                  background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+                  padding: "4px 12px", borderRadius: 6, fontSize: 13, fontWeight: 500,
+                }}>
+                  You
+                </div>
+              </div>
+
+              {/* Status */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {/* Animated dots */}
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: "#8ab4f8",
+                      animation: `meetPulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                    }} />
+                  ))}
+                </div>
+                <span style={{ fontSize: 16, color: "#9aa0a6" }}>{status}</span>
+              </div>
+
+              {/* Inline pulse animation */}
+              <style>{`
+                @keyframes meetPulse {
+                  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+                  40% { opacity: 1; transform: scale(1.1); }
+                }
+              `}</style>
+            </div>
+          )}
+
+          {/* ─── Floating controls bar (Google Meet style) — always visible once joined ─── */}
+          <div style={{
+              position: "absolute", bottom: 16, left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex", alignItems: "center", gap: 12,
+              background: "#303134",
+              borderRadius: 28, padding: "8px 16px",
+              boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
+              zIndex: 20,
+            }}>
+              {/* Mic */}
+              <button
+                onMouseEnter={() => setHovered("mic")}
+                onMouseLeave={() => setHovered(null)}
+                onClick={toggleAudio}
+                title={audioOn ? "Turn off microphone" : "Turn on microphone"}
+                style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  border: "none", cursor: "pointer",
+                  background: audioOn
+                    ? (hovered === "mic" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)")
+                    : "#ea4335",
+                  color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.2s",
+                }}
+              >
+                {audioOn ? Icon.Mic : Icon.MicOff}
+              </button>
+
+              {/* Video */}
+              <button
+                onMouseEnter={() => setHovered("vid")}
+                onMouseLeave={() => setHovered(null)}
+                onClick={toggleVideo}
+                title={videoOn ? "Turn off camera" : "Turn on camera"}
+                style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  border: "none", cursor: "pointer",
+                  background: videoOn
+                    ? (hovered === "vid" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)")
+                    : "#ea4335",
+                  color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.2s",
+                }}
+              >
+                {videoOn ? Icon.Video : Icon.VideoOff}
+              </button>
+
+              {/* Screen share */}
+              <button
+                onMouseEnter={() => setHovered("scr")}
+                onMouseLeave={() => setHovered(null)}
+                onClick={toggleScreenShare}
+                title={screenSharing ? "Stop presenting" : "Present now"}
+                style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  border: "none", cursor: "pointer",
+                  background: screenSharing
+                    ? "#1a73e8"
+                    : (hovered === "scr" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)"),
+                  color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.2s",
+                }}
+              >
+                {screenSharing ? Icon.ScreenOff : Icon.Screen}
+              </button>
+
+              {/* Divider */}
+              <div style={{ width: 1, height: 32, background: "rgba(255,255,255,0.15)", margin: "0 4px" }} />
+
+              {/* End call */}
+              <button
+                onMouseEnter={() => setHovered("end")}
+                onMouseLeave={() => setHovered(null)}
+                onClick={endCall}
+                title="Leave call"
+                style={{
+                  width: 56, height: 48, borderRadius: 24,
+                  border: "none", cursor: "pointer",
+                  background: hovered === "end" ? "#c5221f" : "#ea4335",
+                  color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.2s",
+                }}
+              >
+                {Icon.Phone}
+              </button>
+            </div>
         </div>
 
-        {/* Chat panel */}
+        {/* ─── Chat panel (Google Meet style) ─── */}
         {chatOpen && (
-          <div style={S.chat}>
-            <div style={{ padding:"0.75rem", borderBottom:"1px solid rgba(255,255,255,0.08)", fontWeight:600, fontSize:"0.9rem" }}>
-              {"\uD83D\uDCAC"} In-call chat
+          <div style={{
+            width: 360, display: "flex", flexDirection: "column",
+            background: "#303134",
+            borderRadius: "12px 0 0 12px",
+            margin: "8px 0",
+            overflow: "hidden",
+          }}>
+            {/* Chat header */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)",
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 500 }}>In-call messages</span>
+              <button
+                onClick={() => setChatOpen(false)}
+                style={{
+                  background: "none", border: "none", color: "#9aa0a6",
+                  cursor: "pointer", fontSize: 20, lineHeight: 1,
+                  width: 32, height: 32, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+                title="Close chat"
+              >
+                ✕
+              </button>
             </div>
-            <div style={S.chatMessages}>
-              {messages.length === 0 && <div style={{ color:"#64748b", marginTop:"1rem", textAlign:"center" }}>No messages yet</div>}
+
+            {/* Messages */}
+            <div style={{
+              flex: 1, overflowY: "auto", padding: "12px 16px",
+              display: "flex", flexDirection: "column", gap: 4,
+            }}>
+              {messages.length === 0 && (
+                <div style={{
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  flex: 1, gap: 12, color: "#9aa0a6", textAlign: "center",
+                }}>
+                  {Icon.Chat}
+                  <div style={{ fontSize: 14 }}>Messages can only be seen by people in the call</div>
+                </div>
+              )}
               {messages.map((m, i) => (
-                <div key={i} style={S.chatMsg(m.mine)}>
-                  {!m.mine && <div style={{ fontSize:"0.7rem", color:"#94a3b8", marginBottom:"0.15rem" }}>{m.sender}</div>}
-                  <span style={S.chatBubble(m.mine)}>{m.text}</span>
+                <div key={i} style={{
+                  display: "flex", flexDirection: "column",
+                  alignItems: m.mine ? "flex-end" : "flex-start",
+                  marginBottom: 2,
+                }}>
+                  {/* Show sender name if not mine and different from prev */}
+                  {!m.mine && (i === 0 || messages[i - 1]?.mine || messages[i - 1]?.sender !== m.sender) && (
+                    <div style={{
+                      fontSize: 12, color: "#8ab4f8", fontWeight: 500,
+                      margin: "8px 0 4px 4px",
+                    }}>{m.sender}</div>
+                  )}
+                  <div style={{
+                    padding: "8px 14px", borderRadius: 18,
+                    background: m.mine ? "#1a73e8" : "rgba(255,255,255,0.08)",
+                    maxWidth: "85%", wordBreak: "break-word",
+                    fontSize: 14, lineHeight: 1.45,
+                  }}>
+                    {m.text}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#9aa0a6", margin: "2px 4px 0" }}>
+                    {m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                  </div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
-            <div style={S.chatInput}>
+
+            {/* Chat input */}
+            <div style={{
+              padding: "12px 16px",
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", gap: 8,
+            }}>
               <input
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && sendChat()}
-                placeholder="Type a message\u2026"
-                style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
-                         borderRadius:"0.4rem", padding:"0.4rem 0.6rem", color:"#fff", fontSize:"0.85rem" }}
+                placeholder="Send a message to everyone"
+                style={{
+                  flex: 1,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 24, padding: "10px 16px",
+                  color: "#e8eaed", fontSize: 14,
+                  outline: "none",
+                  transition: "border 0.2s",
+                }}
+                onFocus={e => e.target.style.borderColor = "#8ab4f8"}
+                onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
               />
-              <button onClick={sendChat}
-                style={{ background:"rgba(124,58,237,0.7)", border:"none", borderRadius:"0.4rem",
-                         padding:"0.4rem 0.75rem", color:"#fff", cursor:"pointer" }}>
-                {"\u27A4"}
+              <button
+                onClick={sendChat}
+                disabled={!chatInput.trim()}
+                style={{
+                  width: 40, height: 40, borderRadius: "50%",
+                  border: "none", cursor: chatInput.trim() ? "pointer" : "default",
+                  background: chatInput.trim() ? "#8ab4f8" : "rgba(255,255,255,0.06)",
+                  color: chatInput.trim() ? "#202124" : "#5f6368",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.2s",
+                }}
+              >
+                {Icon.Send}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Controls bar */}
-      <div style={S.controls}>
-        <button style={S.ctrl(audioOn, false)} onClick={toggleAudio} title={audioOn ? "Mute" : "Unmute"}>
-          {audioOn ? "\uD83C\uDF99\uFE0F" : "\uD83D\uDD07"}
-        </button>
-        <button style={S.ctrl(videoOn, false)} onClick={toggleVideo} title={videoOn ? "Stop video" : "Start video"}>
-          {videoOn ? "\uD83D\uDCF9" : "\uD83D\uDEAB"}
-        </button>
-        <button
-          style={S.ctrlScreen(screenSharing)}
-          onClick={toggleScreenShare}
-          title={screenSharing ? "Stop Screen Share" : "Share Screen"}
-        >
-          {screenSharing ? "\uD83D\uDEAB" : "\uD83D\uDCBB"}
-        </button>
-        <button style={S.ctrl(false, true)} onClick={endCall} title="End call">
-          {"\uD83D\uDCF5"}
-        </button>
-      </div>
     </div>
   );
 }
