@@ -85,8 +85,8 @@ const LiveSessions = () => {
     if (searchQuery) {
       filtered = filtered.filter(
         (session) =>
-          session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          session.description.toLowerCase().includes(searchQuery.toLowerCase()),
+          (session.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (session.description || '').toLowerCase().includes(searchQuery.toLowerCase()),
       )
     }
 
@@ -192,7 +192,7 @@ const LiveSessions = () => {
                   <div className="space-y-2 mb-6">
                     <div className="flex items-center text-gray-300">
                       <span className="w-24 text-gray-500">Mentor:</span>
-                      <span>{session.mentor.name}</span>
+                      <span>{session.mentor?.name || session.mentorName || 'Unknown'}</span>
                     </div>
                     <div className="flex items-center text-gray-300">
                       <span className="w-24 text-gray-500">Date:</span>

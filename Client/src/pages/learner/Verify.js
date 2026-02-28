@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 import axios from 'axios'
+import { API_BASE_URL } from '../../config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AuthBackground from '@/components/ui/AuthBackground';
@@ -25,7 +26,7 @@ export default function VerifyLearner(){
     if (!/^[0-9]{4}$/.test(otp)) return setError('Enter a valid 4-digit OTP');
     try{
       setError(null); setLoading(true);
-      const res = await axios.post('http://localhost:3500/Auth/learner/verify-otp', { email, otp });
+      const res = await axios.post(`${API_BASE_URL}/Auth/learner/verify-otp`, { email, otp });
       if (res.data) {
         navigate('/login/learner', { state: { message: 'Email verified. Please login.' } });
       }
@@ -38,7 +39,7 @@ export default function VerifyLearner(){
     if (!email) return setError('Email missing');
     try{
       setError(null);
-      const res = await axios.post('http://localhost:3500/Auth/learner/generate-otp', { email });
+      const res = await axios.post(`${API_BASE_URL}/Auth/learner/generate-otp`, { email });
       setMessage(res.data?.message || 'OTP resent');
     }catch(err){
       setError(err.response?.data?.message || 'Failed to resend OTP');

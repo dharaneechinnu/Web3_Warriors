@@ -5,6 +5,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom"
 import styled, { keyframes, css } from "styled-components"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
+import { API_BASE_URL } from '../../config';
 import { useAuth } from "../../contexts/AuthContext"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +95,7 @@ function Login() {
       setError(null);
       setLoading(true);
       
-      const response = await axios.post('http://localhost:3500/Auth/login', formData);
+      const response = await axios.post(`${API_BASE_URL}/Auth/login`, formData);
       
       if (response.data) {
         // Use AuthContext login method to persist auth

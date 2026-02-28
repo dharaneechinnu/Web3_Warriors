@@ -1,6 +1,19 @@
 const User = require("../Model/UserModel");
 const CertificationModel = require("../Model/CertificationModel");
 
+// Get all mentors
+const getMentors = async (req, res) => {
+  try {
+    const mentors = await User.find({ role: 'mentor' })
+      .select('name email skills bio experience averageRating ratings profileImage')
+      .sort({ averageRating: -1 });
+    console.log(`[getMentors] Found ${mentors.length} mentors`);
+    res.json({ success: true, mentors });
+  } catch (error) {
+    console.error('getMentors error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch mentors' });
+  }
+};
 
 const getUserProfile = async (req, res) => {
   try {
@@ -47,7 +60,8 @@ const updateUserProfile = async (req, res) => {
       name, 
       mobileNo, 
       UserWalletAddress, 
-      skills, 
+      skills,
+      expertise,
       gender, 
       dob, 
       bio, 
@@ -70,6 +84,7 @@ const updateUserProfile = async (req, res) => {
     if (mobileNo) user.mobileNo = mobileNo;
     if (UserWalletAddress) user.UserWalletAddress = UserWalletAddress;
     if (skills) user.skills = skills;
+    if (expertise) user.skills = expertise;  // mentor sends expertise → map to skills
     if (gender) user.gender = gender;
     if (dob) user.dob = dob;
     if (bio !== undefined) user.bio = bio;
@@ -189,6 +204,7 @@ const getUserRatings = async (req, res) => {
 
 
 module.exports = { 
+  getMentors,
   getUserProfile,
   updateUserProfile, 
   getUserDashboard,

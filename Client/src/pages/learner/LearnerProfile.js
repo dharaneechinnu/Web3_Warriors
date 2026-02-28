@@ -55,7 +55,7 @@ const LearnerProfile = () => {
       const token = localStorage.getItem("token");
       const skills = form.skills.split(",").map((s) => s.trim()).filter(Boolean);
       await api.put(
-        `/User/${learnerId}`,
+        `/User/profile/${learnerId}`,
         { name: form.name, bio: form.bio, skills },
         { headers: { Authorization: `Bearer ${token}` } }
       );

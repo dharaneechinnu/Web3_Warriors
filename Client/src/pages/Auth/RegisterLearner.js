@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import { API_BASE_URL } from '../../config';
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import AuthBackground from "../../components/ui/AuthBackground";
@@ -25,7 +26,7 @@ function RegisterLearner(){
     try{
       setError(null);setLoading(true);
       const payload = { ...formData };
-      await axios.post('http://localhost:3500/Auth/register', payload);
+      await axios.post(`${API_BASE_URL}/Auth/register`, payload);
       // after successful register, navigate to learner login
       navigate('/login/learner', { state: { message: 'Registration successful. Please login.' } });
     }catch(err){

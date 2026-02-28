@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import styled, { keyframes, css } from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import { API_BASE_URL } from '../../config';
 import Web3 from "web3";
 import { address } from "../../services/contractAddress";
 import { contractabi } from "../../services/abi";
@@ -131,7 +132,7 @@ function Register() {
       setError(null);
       setLoading(true);
 
-      const response = await axios.post('http://localhost:3500/Auth/register', formData);
+      const response = await axios.post(`${API_BASE_URL}/Auth/register`, formData);
 
       // Defensive checks: only treat as success when response.data.success === true
       // and the server message doesn't indicate an existing user (some APIs misuse success flag).

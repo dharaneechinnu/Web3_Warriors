@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom"
 import styled from "styled-components"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
+import { API_BASE_URL } from '../../config';
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import AuthBackground from "../../components/ui/AuthBackground"
@@ -25,7 +26,7 @@ function LoginMentor(){
     e.preventDefault();
     try{
       setError(null);setLoading(true);
-      const response = await axios.post('http://localhost:3500/Auth/login', formData);
+      const response = await axios.post(`${API_BASE_URL}/Auth/login`, formData);
       if(response.data){
         localStorage.setItem('token', response.data.accessToken);
         localStorage.setItem('userId', response.data.user._id);

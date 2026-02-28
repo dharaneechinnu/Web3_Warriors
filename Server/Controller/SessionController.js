@@ -1,5 +1,12 @@
 const Session = require('../Model/SessionModel');
 const User = require('../Model/UserModel');
+const { v4: uuidv4 } = require('uuid');
+const emailService = require('../services/emailService');
+const notifService = require('../services/notificationService');
+
+// Socket.IO instance — set from Server.js via setIO()
+let io = null;
+exports.setIO = (socketIO) => { io = socketIO; };
 
 // ─── CREATE SESSION SLOT (Mentor) ─────────────────────────────────────────────
 exports.createSession = async (req, res) => {
@@ -156,7 +163,10 @@ exports.acceptBooking = async (req, res) => {
         }
 
         session.status = 'confirmed';
-        if (meetingLink) session.meetingLink = meetingLink;
+        const roomId = uuidv4();
+        session.roomId = roomId;
+        session.meetingLink = `/room/${roomId}`;
+        if (meetingLink) session.meetingLink = meetingLink; // override only if explicitly passed
         if (mentorNotes) session.mentorNotes = mentorNotes;
         session.updatedAt = new Date();
         await session.save();
@@ -370,6 +380,243 @@ exports.updateSession = async (req, res) => {
 
         const updated = await Session.findByIdAndUpdate(id, updates, { new: true });
         res.json({ success: true, session: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── LEARNER SEND SESSION REQUEST ─────────────────────────────────────────────
+// POST /sessions/request
+// Learner sends a request — status starts as "pending"; mentor must accept/reject
+exports.sendRequest = async (req, res) => {
+    try {
+        const { mentorId, learnerId, topic, learnerMessage, requestedTimes, duration } = req.body;
+
+        if (!mentorId || !learnerId || !topic) {
+            return res.status(400).json({ success: false, message: 'mentorId, learnerId and topic are required' });
+        }
+        if (!requestedTimes || !requestedTimes.length) {
+            return res.status(400).json({ success: false, message: 'Scheduled date/time is required' });
+        }
+
+        const mentor = await User.findById(mentorId);
+        if (!mentor || mentor.role !== 'mentor') {
+            return res.status(404).json({ success: false, message: 'Mentor not found' });
+        }
+        const learner = await User.findById(learnerId);
+        if (!learner) {
+            return res.status(404).json({ success: false, message: 'Learner not found' });
+        }
+
+        const scheduledAt = new Date(requestedTimes[0]);
+
+        const session = await Session.create({
+            mentorId,
+            mentorName: mentor.name,
+            mentorEmail: mentor.email,
+            learnerId,
+            learnerName: learner.name,
+            learnerEmail: learner.email,
+            title: `Mentorship: ${topic}`,
+            topic,
+            date: scheduledAt,
+            scheduledAt,
+            duration: Number(duration) || 60,
+            price: 0,
+            requestedTimes: requestedTimes.map(t => new Date(t)),
+            learnerMessage: learnerMessage || '',
+            status: 'pending'               // mentor must accept
+        });
+
+        // ── Send email to mentor ──
+        emailService.sendBookingRequestEmail({
+            mentorEmail: mentor.email,
+            mentorName: mentor.name,
+            learnerName: learner.name,
+            topic,
+            date: scheduledAt,
+            duration: Number(duration) || 60,
+            message: learnerMessage || ''
+        });
+
+        // ── In-app notification to mentor ──
+        notifService.createNotification({
+            userId: mentorId,
+            type: 'booking_request',
+            title: 'New Mentorship Request',
+            message: `${learner.name} requested a mentorship session on "${topic}"`,
+            sessionId: session._id
+        }, io);
+
+        res.status(201).json({
+            success: true,
+            message: 'Mentorship request sent! Awaiting mentor confirmation.',
+            session
+        });
+    } catch (error) {
+        console.error('sendRequest error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── MENTOR ACCEPT OR SCHEDULE REQUEST ────────────────────────────────────────
+// PATCH /sessions/accept-request/:id
+// Mentor picks a final date/time, sets price, generates roomId
+exports.acceptRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { mentorId, scheduledAt, price, mentorNotes, duration } = req.body;
+
+        const session = await Session.findById(id);
+        if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+        if (session.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+        if (session.status !== 'requested' && session.status !== 'pending') {
+            return res.status(400).json({ success: false, message: 'Can only accept pending/requested sessions' });
+        }
+
+        // Charge learner tokens if price > 0
+        if (price && Number(price) > 0) {
+            const learner = await User.findById(session.learnerId);
+            if (!learner) return res.status(404).json({ success: false, message: 'Learner not found' });
+            if ((learner.tokenBalance || 0) < Number(price)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Learner has insufficient tokens. Required: ${price}, Available: ${learner.tokenBalance}`
+                });
+            }
+            learner.tokenBalance -= Number(price);
+            learner.transactionHistory.push({
+                transactionType: 'spend',
+                amount: Number(price),
+                description: `Mentorship session scheduled: ${session.topic} with ${session.mentorName}`,
+                timestamp: new Date()
+            });
+            await learner.save();
+        }
+
+        const roomId = uuidv4();
+        const confirmedAt = scheduledAt ? new Date(scheduledAt) : session.scheduledAt;
+        session.status = 'confirmed';
+        session.scheduledAt = confirmedAt;
+        session.date = confirmedAt;
+        session.price = Number(price) || 0;
+        session.duration = Number(duration) || session.duration;
+        session.roomId = roomId;
+        session.meetingLink = `/room/${roomId}`;
+        if (mentorNotes) session.mentorNotes = mentorNotes;
+        session.updatedAt = new Date();
+        await session.save();
+
+        // ── Send acceptance email to learner ──
+        emailService.sendBookingAcceptedEmail({
+            learnerEmail: session.learnerEmail,
+            learnerName: session.learnerName,
+            mentorName: session.mentorName,
+            topic: session.topic,
+            scheduledAt: confirmedAt,
+            duration: session.duration,
+            roomId
+        });
+
+        // ── In-app notification to learner ──
+        notifService.createNotification({
+            userId: session.learnerId,
+            type: 'booking_accepted',
+            title: 'Mentorship Confirmed! ✅',
+            message: `${session.mentorName} accepted your mentorship request for "${session.topic}"`,
+            sessionId: session._id
+        }, io);
+
+        res.json({ success: true, message: 'Request accepted. Room created.', session, roomId });
+    } catch (error) {
+        console.error('acceptRequest error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── REJECT REQUEST (Mentor) ──────────────────────────────────────────────────
+// PATCH /sessions/reject-request/:id
+exports.rejectRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { mentorId, cancelReason } = req.body;
+
+        const session = await Session.findById(id);
+        if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+        if (session.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+        if (session.status !== 'requested' && session.status !== 'pending') {
+            return res.status(400).json({ success: false, message: 'Session is not in pending/requested state' });
+        }
+
+        session.status = 'rejected';
+        session.cancelledBy = 'mentor';
+        session.cancelReason = cancelReason || '';
+        session.cancelledAt = new Date();
+        session.updatedAt = new Date();
+        await session.save();
+
+        // ── Send rejection email to learner ──
+        emailService.sendBookingRejectedEmail({
+            learnerEmail: session.learnerEmail,
+            learnerName: session.learnerName,
+            mentorName: session.mentorName,
+            topic: session.topic,
+            reason: cancelReason || ''
+        });
+
+        // ── In-app notification to learner ──
+        notifService.createNotification({
+            userId: session.learnerId,
+            type: 'booking_rejected',
+            title: 'Mentorship Request Declined',
+            message: `${session.mentorName} declined your mentorship request for "${session.topic}"${cancelReason ? ': ' + cancelReason : ''}`,
+            sessionId: session._id
+        }, io);
+
+        res.json({ success: true, message: 'Request rejected' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── GET JOIN INFO (Both sides) ───────────────────────────────────────────────
+// GET /sessions/join/:id?userId=...
+// Returns roomId so both mentor & learner can enter the video room
+exports.getJoinInfo = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { userId } = req.query;
+
+        const session = await Session.findById(id);
+        if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+
+        const isMentor = session.mentorId.toString() === userId;
+        const isLearner = session.learnerId?.toString() === userId;
+
+        if (!isMentor && !isLearner) {
+            return res.status(403).json({ success: false, message: 'You are not a participant in this session' });
+        }
+        if (session.status !== 'confirmed') {
+            return res.status(400).json({ success: false, message: 'Session is not confirmed yet' });
+        }
+        if (!session.roomId) {
+            return res.status(400).json({ success: false, message: 'Room has not been created for this session' });
+        }
+
+        res.json({
+            success: true,
+            roomId: session.roomId,
+            sessionId: session._id,
+            title: session.title,
+            scheduledAt: session.scheduledAt || session.date,
+            duration: session.duration,
+            participantRole: isMentor ? 'mentor' : 'learner',
+            meetingLink: session.meetingLink
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

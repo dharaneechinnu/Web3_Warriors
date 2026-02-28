@@ -12,6 +12,7 @@ const {
 } = require("../Controller/userController");
 
 // Routes
+router.get("/mentors", require("../Controller/userController").getMentors); // Get all mentors
 router.get("/:id", getUserProfile); // Get user profile
 router.put("/profile/:userId", updateUserProfile); // Update profile
 router.get("/dashboard/:id", getUserDashboard); // Get dashboard data

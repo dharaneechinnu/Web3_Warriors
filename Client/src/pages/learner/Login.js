@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext";
+import { API_BASE_URL } from '../../config';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthBackground from "@/components/ui/AuthBackground";
@@ -102,7 +103,7 @@ function LoginLearner() {
       setLoading(true);
       
       // Call the API directly since our AuthContext login expects the full response
-      const response = await fetch('http://localhost:3500/Auth/login', {
+      const response = await fetch(`${API_BASE_URL}/Auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

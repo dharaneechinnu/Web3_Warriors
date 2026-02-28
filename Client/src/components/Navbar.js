@@ -1,10 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import styled, { keyframes, css } from "styled-components"
 import { useAuth } from "../contexts/AuthContext"
 import TokenStorage from "../utils/tokenStorage"
+import api from "../services/api"
+import { io as socketIO } from "socket.io-client"
+import { SOCKET_URL } from "../config"
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(-10px); }
@@ -548,45 +551,86 @@ const Navbar = () => {
     setMobileMenuOpen(false)
     setUserMenuOpen(false)
   }, [location.pathname])
-  
-  // Mock notifications data - replace with actual API call
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: "feedback",
-      title: "Mentor Feedback Received",
-      message: "Dr. Sarah Johnson provided feedback on your React project",
-      time: "2 hours ago",
-      read: false
-    },
-    {
-      id: 2,
-      type: "approval",
-      title: "Course Approved",
-      message: "Your submission for Node.js Microservices has been approved",
-      time: "5 hours ago",
-      read: false
-    },
-    {
-      id: 3,
-      type: "credential",
-      title: "Credential Issued",
-      message: "You earned a new credential: React Fundamentals",
-      time: "1 day ago",
-      read: true
-    },
-    {
-      id: 4,
-      type: "tokens",
-      title: "Tokens Credited",
-      message: "50 tokens credited for completing React Fundamentals",
-      time: "1 day ago",
-      read: true
+
+  // ── Helper: map notification type → route ──
+  const getNotificationRoute = useCallback((notif) => {
+    const role = localStorage.getItem('userRole') || 'learner';
+    switch (notif.type) {
+      case 'booking_request':   return '/mentor/sessions';
+      case 'booking_accepted':  return '/sessions';
+      case 'booking_rejected':  return '/sessions';
+      case 'session_reminder':  return role === 'mentor' ? '/mentor/sessions' : '/sessions';
+      case 'session_completed': return role === 'mentor' ? '/mentor/sessions' : '/sessions';
+      case 'session_cancelled': return role === 'mentor' ? '/mentor/sessions' : '/sessions';
+      default:                  return null;
     }
-  ]);
+  }, []);
+  
+  // ── Real notifications from API ──
+  const [notifications, setNotifications] = useState([]);
+
+  const fetchNotifications = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await api.get('/notifications', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data.success) setNotifications(res.data.notifications || []);
+    } catch (err) {
+      // silent — notifications are non-critical
+    }
+  }, []);
+
+  // Fetch on mount + poll every 30s
+  useEffect(() => {
+    fetchNotifications();
+    const timer = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(timer);
+  }, [fetchNotifications]);
+
+  // Socket.IO real-time notifications
+  useEffect(() => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    const socket = socketIO(SOCKET_URL, { transports: ['websocket'] });
+    socket.emit('join-notifications', userId);
+    socket.on('new-notification', (notif) => {
+      setNotifications(prev => [notif, ...prev]);
+      // Browser / Chrome push notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          const browserNotif = new Notification(notif.title, {
+            body: notif.message,
+            icon: '/logo192.png',
+            tag: notif._id || 'notif',
+            requireInteraction: false,
+          });
+          browserNotif.onclick = () => {
+            window.focus();
+            const route = getNotificationRoute(notif);
+            if (route) window.location.href = route;
+            browserNotif.close();
+          };
+        } catch (e) {
+          console.warn('Browser notification failed:', e);
+        }
+      }
+    });
+    return () => socket.disconnect();
+  }, []);
+
+  // Request browser notification permission on auth
+  useEffect(() => {
+    if (isAuthenticated && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(p => {
+          console.log('Notification permission:', p);
+        }).catch(() => {});
+      }
+    }
+  }, [isAuthenticated]);
 
   // Count unread notifications
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   // Get user data from auth context or fallback to localStorage
   const userName = user?.name || user?.email?.charAt(0).toUpperCase() || "U";
@@ -789,26 +833,64 @@ const Navbar = () => {
       <NotificationModal isOpen={notificationOpen}>
         <NotificationModalHeader>
           <NotificationModalTitle>🔔 Notifications</NotificationModalTitle>
-          <NotificationModalClose onClick={() => setNotificationOpen(false)}>
-            ✕
-          </NotificationModalClose>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {unreadCount > 0 && (
+              <button
+                onClick={async () => {
+                  const token = localStorage.getItem('token');
+                  try {
+                    await api.patch('/notifications/read-all', {}, { headers: { Authorization: `Bearer ${token}` } });
+                    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+                  } catch {}
+                }}
+                style={{
+                  background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: 'none',
+                  borderRadius: '0.4rem', padding: '0.3rem 0.6rem', fontSize: '0.72rem',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Mark all read
+              </button>
+            )}
+            <NotificationModalClose onClick={() => setNotificationOpen(false)}>
+              ✕
+            </NotificationModalClose>
+          </div>
         </NotificationModalHeader>
         <NotificationModalContent>
           {notifications.length > 0 ? (
             notifications.map((notification) => (
               <NotificationItem 
-                key={notification.id} 
+                key={notification._id} 
                 type={notification.type}
-                onClick={() => {
-                  // Mark as read when clicked
-                  setNotifications(notifications.map(n => 
-                    n.id === notification.id ? { ...n, read: true } : n
-                  ));
+                style={{ opacity: notification.isRead ? 0.6 : 1, cursor: 'pointer' }}
+                onClick={async () => {
+                  // Mark as read
+                  if (!notification.isRead) {
+                    const token = localStorage.getItem('token');
+                    try {
+                      await api.patch(`/notifications/read/${notification._id}`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                      setNotifications(prev => prev.map(n => 
+                        n._id === notification._id ? { ...n, isRead: true } : n
+                      ));
+                    } catch {}
+                  }
+                  // Navigate to the relevant page
+                  const route = getNotificationRoute(notification);
+                  if (route) {
+                    setNotificationOpen(false);
+                    navigate(route);
+                  }
                 }}
               >
-                <NotificationItemTitle>{notification.title}</NotificationItemTitle>
+                <NotificationItemTitle>
+                  {!notification.isRead && <span style={{ color: '#f59e0b', marginRight: '0.3rem' }}>●</span>}
+                  {notification.title}
+                </NotificationItemTitle>
                 <NotificationItemMessage>{notification.message}</NotificationItemMessage>
-                <NotificationItemTime>{notification.time}</NotificationItemTime>
+                <NotificationItemTime>
+                  {notification.createdAt ? new Date(notification.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
+                </NotificationItemTime>
               </NotificationItem>
             ))
           ) : (

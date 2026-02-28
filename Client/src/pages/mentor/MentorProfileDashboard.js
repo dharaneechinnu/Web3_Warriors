@@ -67,7 +67,7 @@ const MentorProfileDashboard = () => {
       const token = localStorage.getItem("token");
       const expertise = form.expertise.split(",").map((s) => s.trim()).filter(Boolean);
       await api.put(
-        `/User/${mentorId}`,
+        `/User/profile/${mentorId}`,
         { name: form.name, bio: form.bio, expertise, hourlyRate: form.hourlyRate },
         { headers: { Authorization: `Bearer ${token}` } }
       );

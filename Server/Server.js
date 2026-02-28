@@ -1,12 +1,31 @@
 require('dotenv').config();
 const express= require("express");
 const app = express();
-const PORT = 3500||process.env.PORT
+const http = require('http');
+const { Server: SocketIOServer } = require('socket.io');
+const { PORT, CLIENT_URL } = require('./config/appConfig');
 const mongoose = require('mongoose');
 const cors = require("cors");
 const path = require("path");
 const fs = require('fs');
 
+// ── HTTP server & Socket.IO ───────────────────────────────────────────────────
+const httpServer = http.createServer(app);
+const io = new SocketIOServer(httpServer, {
+    cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+require('./sockets/signaling')(io);
+
+// Pass io to SessionController so it can emit real-time notifications
+const sessionController = require('./Controller/SessionController');
+sessionController.setIO(io);
+
+// Socket.IO: let authenticated users join their personal notification room
+io.on('connection', (socket) => {
+    socket.on('join-notifications', (userId) => {
+        if (userId) socket.join(`user_${userId}`);
+    });
+});
 
 app.use(cors());
 app.use(express.json());
@@ -54,7 +73,8 @@ app.use("/mentorship",require("./Router/MentorRouter"))
 app.use("/wallet", require("./Router/walletRoutes"));
 app.use("/challenges", require("./Router/ChallengeRoutes"));
 app.use("/sessions", require("./Router/SessionRoutes"));
+app.use("/notifications", require("./Router/NotificationRoutes"));
 
-app.listen(PORT,()=>{
-    console.log(`Server is running in PORT :${PORT}`);
+httpServer.listen(PORT, () => {
+    console.log(`Server is running on PORT: ${PORT} (HTTP + WebSocket)`);
 });

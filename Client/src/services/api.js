@@ -1,7 +1,8 @@
 import axios from 'axios';
 import TokenStorage from '../utils/tokenStorage';
+import { API_BASE_URL } from '../config';
 
-export const API_BASE_URL = 'http://localhost:3500';
+export { API_BASE_URL };
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/`,

@@ -19,6 +19,7 @@ import {
   FaPlayCircle
 } from 'react-icons/fa';
 import api from '../../services/api';
+import { API_BASE_URL } from '../../config';
 import LectureVideoPlayer from '../../components/LectureVideoPlayer';
 
 
@@ -1212,7 +1213,7 @@ const LearnerCourseView = () => {
           });
           
           navigator.sendBeacon(
-            `http://localhost:3500/courses/updateLectureProgress`,
+            `${API_BASE_URL}/courses/updateLectureProgress`,
             new Blob([data], { type: 'application/json' })
           );
           console.log('🚀 CLIENT: Progress saved via beacon on page unload');

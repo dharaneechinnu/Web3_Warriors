@@ -10,17 +10,26 @@ const SessionSchema = new mongoose.Schema({
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     topic: { type: String, default: '' },
-    date: { type: Date, required: true },
-    duration: { type: Number, default: 60 }, // in minutes
-    price: { type: Number, required: true, min: 0 }, // token cost
+    date: { type: Date, required: false },      // mentor's open-slot date
+    scheduledAt: { type: Date, default: null }, // confirmed time set on accept
+    duration: { type: Number, default: 60 },    // minutes
+    price: { type: Number, default: 0, min: 0 },
     status: {
         type: String,
-        enum: ['available', 'pending', 'confirmed', 'completed', 'cancelled', 'rejected'],
+        enum: ['available', 'requested', 'pending', 'confirmed', 'completed', 'cancelled', 'rejected'],
         default: 'available'
     },
-    meetingLink: { type: String, default: '' },
-    learnerNotes: { type: String, default: '' }, // notes from learner when booking
-    mentorNotes: { type: String, default: '' },  // notes from mentor
+
+    // ── WebRTC room ────────────────────────────────────────────────────────────
+    roomId: { type: String, default: null },    // UUID set when mentor confirms
+    meetingLink: { type: String, default: '' }, // /room/:roomId (internal)
+
+    // ── Learner-initiated request ──────────────────────────────────────────────
+    requestedTimes: [{ type: Date }],           // preferred slots sent by learner
+    learnerMessage: { type: String, default: '' }, // learner's request message
+
+    learnerNotes: { type: String, default: '' },
+    mentorNotes: { type: String, default: '' },
     rating: { type: Number, min: 1, max: 5, default: null },
     review: { type: String, default: '' },
     ratedAt: { type: Date },

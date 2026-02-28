@@ -34,6 +34,8 @@ import MentorChallenges from './pages/mentor/MentorChallenges';
 import SessionManagement from './pages/mentor/SessionManagement';
 import SubmissionReview from './pages/mentor/SubmissionReview';
 import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
+import BookSession from './pages/learner/BookSession';
+import VideoRoom from './pages/VideoRoom';
 
 // Loading component
 const LoadingScreen = () => (
@@ -77,6 +79,8 @@ const AuthRoute = ({ children }) => {
 
 function AppRoutes() {
   const { isAuthenticated, user, loading } = useAuth();
+  const location = useLocation();
+  const isVideoRoom = location.pathname.startsWith('/room/');
 
   // While auth state is initializing, show loading to avoid route flicker
   if (loading) {
@@ -85,7 +89,7 @@ function AppRoutes() {
 
   return (
     <div className="min-h-screen bg-background-light text-gray-800">
-      <Navbar />
+      {!isVideoRoom && <Navbar />}
       <Routes>
         {/* Root: show landing page if unauthenticated, else redirect to role home */}
         <Route
@@ -131,7 +135,7 @@ function AppRoutes() {
             <MentorProfile />
           </ProtectedRoute>
         } />
-        <Route path="/sessions" element={
+        <Route path="/live-sessions" element={
           <ProtectedRoute>
             <LiveSessions />
           </ProtectedRoute>
@@ -199,6 +203,15 @@ function AppRoutes() {
         } />
         <Route path="/learner/profile" element={
           <ProtectedRoute><LearnerProfile /></ProtectedRoute>
+        } />
+        {/* Learner session booking (replaces LiveSessions for learners) */}
+        <Route path="/sessions" element={
+          <ProtectedRoute><BookSession /></ProtectedRoute>
+        } />
+
+        {/* WebRTC Video Room — fullscreen, no Navbar */}
+        <Route path="/room/:roomId" element={
+          <ProtectedRoute><VideoRoom /></ProtectedRoute>
         } />
 
         {/* Mentor feature routes */}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import { API_BASE_URL } from '../../config';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthBackground from "@/components/ui/AuthBackground";
@@ -25,7 +26,7 @@ function RegisterLearner(){
     try{
       setError(null);setLoading(true);
       const payload = { ...formData };
-      const response = await axios.post('http://localhost:3500/Auth/learner/register', payload);
+      const response = await axios.post(`${API_BASE_URL}/Auth/learner/register`, payload);
       if (response.data && (response.data.success === true || response.status === 200)) {
         // Redirect to OTP verification page with email
         navigate('/verify/learner', { state: { email: formData.email, message: response.data.message || 'Registration successful. Enter the OTP sent to your email.' } });
