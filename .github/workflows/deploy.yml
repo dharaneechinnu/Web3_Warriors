@@ -19,15 +19,23 @@ jobs:
           script: |
             cd /var/www/Web3_Warriors
             
+            # Save .env files before pull
+            cp Server/.env /tmp/server_env_backup 2>/dev/null || true
+            cp Client/.env /tmp/client_env_backup 2>/dev/null || true
+            
             git fetch --all
             git reset --hard origin/main
+            
+            # Restore .env files after pull
+            cp /tmp/server_env_backup Server/.env 2>/dev/null || true
+            cp /tmp/client_env_backup Client/.env 2>/dev/null || true
             
             cd Server
             npm install
             pm2 restart Server
             
             cd ../Client
-            npm install
+            npm install --legacy-peer-deps
             npm run build
             
             systemctl restart nginx
