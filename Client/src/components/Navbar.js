@@ -668,7 +668,7 @@ const Navbar = () => {
         <NavInner>
           <Logo>
             <LogoIcon>B3</LogoIcon>
-            <span>Credentialing Platform</span>
+            <span>Platform</span>
           </Logo>
 
          
@@ -859,7 +859,7 @@ const Navbar = () => {
 
         <Logo to="/" style={{marginBottom: '0.5rem'}}>
           <LogoIcon>B3</LogoIcon>
-          <span>Credentialing Platform</span>
+          <span>Platform</span>
         </Logo>
 
         {isAuthenticated && (
