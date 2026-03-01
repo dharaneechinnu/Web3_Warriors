@@ -56,7 +56,7 @@ const CourseList = () => {
   const fetchEnrolledCourses = async () => {
     try {
       const response = await api.get(`/courses/enrolled/${user._id}`);
-      const enrolled = response.data.enrolledCourses || [];
+      const enrolled = response.data.courses || response.data.enrolledCourses || [];
       setEnrolledCourses(enrolled.map(course => course._id));
     } catch (err) {
       console.error('Error fetching enrolled courses:', err);
@@ -126,14 +126,16 @@ const CourseList = () => {
     return Boolean(mentorIdVal && userIdVal && String(mentorIdVal) === String(userIdVal));
   };
 
-  const handleEnrollSuccess = () => {
-    // Add course to enrolled list
-    setEnrolledCourses(prev => [...prev, selectedCourse._id]);
+  const handleEnrollSuccess = (enrolledCourse) => {
+    // Add course to enrolled list using data passed from popup
+    const courseId = enrolledCourse?._id || selectedCourse?._id;
+    const courseTitle = enrolledCourse?.title || selectedCourse?.title;
+    setEnrolledCourses(prev => [...prev, courseId]);
     setShowEnrollmentPopup(false);
     setSelectedCourse(null);
     
     // Show success message
-    alert(`Successfully enrolled in ${selectedCourse.title}!`);
+    alert(`Successfully enrolled in ${courseTitle}!`);
   };
 
   const handleEnrollmentClose = () => {
@@ -391,6 +393,7 @@ const CourseList = () => {
         isOpen={showEnrollmentPopup}
         onClose={handleEnrollmentClose}
         course={selectedCourse}
+        learnerId={user?._id}
         onEnrollSuccess={handleEnrollSuccess}
       />
     </div>
