@@ -1,8 +1,15 @@
 const Challenge = require('../Model/ChallengeModel');
 const User = require('../Model/UserModel');
+const notifService = require('../services/notificationService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const tokenContractService = require('../web3/tokenContract');
+const nftContractService = require('../web3/nftContract');
+
+// io reference (set from Server.js)
+let io = null;
+exports.setIO = (ioInstance) => { io = ioInstance; };
 
 // Ensure upload dir exists
 const uploadDir = path.join(__dirname, '../uploads/challenges');
@@ -239,23 +246,20 @@ exports.submitChallenge = async (req, res) => {
             return res.status(400).json({ success: false, message: 'You must join the challenge before submitting' });
         }
 
-        // Check if already submitted
+        // Fetch actual user name from DB
+        const learnerUser = await User.findById(learnerId).select('name email');
+        const actualName = learnerUser ? (learnerUser.name || learnerUser.email || 'Learner') : (learnerName || 'Learner');
+        const actualEmail = learnerUser ? (learnerUser.email || '') : (learnerEmail || '');
+
+        // Check if already submitted — block duplicate submissions
         const existing = challenge.submissions.find(s => s.learnerId.toString() === learnerId);
         if (existing) {
-            // Allow resubmission — update existing
-            existing.submissionText = submissionText || existing.submissionText;
-            existing.submissionUrl = submissionUrl || existing.submissionUrl;
-            if (req.file) {
-                existing.fileUrl = `/uploads/challenges/${req.file.filename}`;
-                existing.fileName = req.file.originalname;
-            }
-            existing.submittedAt = new Date();
-            existing.status = 'submitted';
+            return res.status(400).json({ success: false, message: 'You have already submitted for this challenge. Only one submission is allowed.' });
         } else {
             const submission = {
                 learnerId,
-                learnerName: learnerName || 'Learner',
-                learnerEmail: learnerEmail || '',
+                learnerName: actualName,
+                learnerEmail: actualEmail,
                 submissionText: submissionText || '',
                 submissionUrl: submissionUrl || '',
                 fileUrl: req.file ? `/uploads/challenges/${req.file.filename}` : '',
@@ -267,6 +271,16 @@ exports.submitChallenge = async (req, res) => {
         }
 
         await challenge.save();
+
+        // Notify mentor about new submission
+        notifService.createNotification({
+            userId: challenge.mentorId,
+            type: 'challenge_submission',
+            title: 'New Challenge Submission',
+            message: `${actualName} submitted to "${challenge.title}"`,
+            metadata: { challengeId: challenge._id, learnerId }
+        }, io);
+
         res.json({ success: true, message: 'Submission received successfully' });
     } catch (error) {
         console.error('submitChallenge error:', error);
@@ -319,6 +333,16 @@ exports.rankSubmission = async (req, res) => {
         submission.reviewedBy = mentorId;
 
         await challenge.save();
+
+        // Notify learner about ranking
+        notifService.createNotification({
+            userId: submission.learnerId,
+            type: 'challenge_ranked',
+            title: `Challenge Ranked #${rank}`,
+            message: `Your submission to "${challenge.title}" was ranked #${rank}${score ? ` with score ${score}` : ''}`,
+            metadata: { challengeId: challenge._id, rank, score }
+        }, io);
+
         res.json({ success: true, message: 'Submission ranked', submission });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -358,6 +382,29 @@ exports.distributeRewards = async (req, res) => {
 
                 const learner = await User.findById(sub.learnerId);
                 if (learner) {
+                    // ── Web3: reward tokens on-chain ───────────────────────
+                    if (learner.UserWalletAddress) {
+                        const rwResult = await tokenContractService.rewardUser(
+                            learner.UserWalletAddress,
+                            tokens,
+                            `Challenge reward: ${challenge.title} (Rank #${sub.rank})`
+                        );
+                        if (rwResult.success) {
+                            sub.rewardTxHash = rwResult.txHash;
+                        }
+
+                        // Mint challenge-winner NFT for rank #1
+                        if (sub.rank === 1) {
+                            const nftResult = await nftContractService.mintChallengeNFT(
+                                learner.UserWalletAddress,
+                                challenge.title
+                            );
+                            if (nftResult.success) {
+                                console.log(`[distributeRewards] Challenge NFT minted → tokenId=${nftResult.tokenId}`);
+                            }
+                        }
+                    }
+
                     learner.tokenBalance = (learner.tokenBalance || 0) + tokens;
                     learner.transactionHistory.push({
                         transactionType: 'earn',
@@ -375,6 +422,20 @@ exports.distributeRewards = async (req, res) => {
         challenge.updatedAt = new Date();
         await challenge.save();
 
+        // Notify all winners about their rewards
+        for (const sub of rankedSubs) {
+            const tokens = sub.rewardTokens || 0;
+            if (tokens > 0) {
+                notifService.createNotification({
+                    userId: sub.learnerId,
+                    type: 'challenge_reward',
+                    title: `🏆 You won ${tokens} tokens!`,
+                    message: `Congratulations! You placed #${sub.rank} in "${challenge.title}" and earned ${tokens} tokens.`,
+                    metadata: { challengeId: challenge._id, rank: sub.rank, tokens }
+                }, io);
+            }
+        }
+
         res.json({ success: true, message: 'Rewards distributed successfully', distributed: rankedSubs.length });
     } catch (error) {
         console.error('distributeRewards error:', error);
@@ -389,12 +450,18 @@ exports.getLeaderboard = async (req, res) => {
         const challenge = await Challenge.findById(id);
         if (!challenge) return res.status(404).json({ success: false, message: 'Challenge not found' });
 
+        // Fetch real names from User model for all participants
+        const learnerIds = challenge.submissions.map(s => s.learnerId);
+        const users = await User.find({ _id: { $in: learnerIds } }).select('name email').lean();
+        const userMap = {};
+        users.forEach(u => { userMap[u._id.toString()] = u.name || u.email || 'Learner'; });
+
         const ranked = challenge.submissions
             .filter(s => s.rank)
             .sort((a, b) => a.rank - b.rank)
             .map(s => ({
                 rank: s.rank,
-                learnerName: s.learnerName,
+                learnerName: userMap[s.learnerId.toString()] || s.learnerName,
                 learnerId: s.learnerId,
                 score: s.score,
                 rewardTokens: s.rewardTokens,
@@ -407,15 +474,23 @@ exports.getLeaderboard = async (req, res) => {
             .sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
             .map(s => ({
                 rank: null,
-                learnerName: s.learnerName,
+                learnerName: userMap[s.learnerId.toString()] || s.learnerName,
                 learnerId: s.learnerId,
                 score: s.score,
                 submittedAt: s.submittedAt
             }));
 
+        // Also fetch participant names (for showing all joined users)
+        const participantUsers = await User.find({ _id: { $in: challenge.participants } }).select('name email').lean();
+        const participants = participantUsers.map(u => ({
+            _id: u._id,
+            name: u.name || u.email || 'Learner'
+        }));
+
         res.json({
             success: true,
             leaderboard: [...ranked, ...unranked],
+            participants,
             totalParticipants: challenge.participants.length,
             totalSubmissions: challenge.submissions.length
         });

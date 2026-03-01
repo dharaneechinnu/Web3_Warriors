@@ -17,6 +17,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default:null
   },
+  registrationTxHash: {
+    type: String,
+    default: null
+  },
   dob: {
     type: Date,
    
@@ -64,13 +68,14 @@ const userSchema = new mongoose.Schema({
   coursesEnrolled: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
   tokenBalance: {
     type: Number,
-    default: 0,
+    default: 10,
   },
   transactionHistory: [{
     transactionType: { type: String, enum: ['earn', 'spend'], required: true },
     amount: { type: Number, required: true },
     timestamp: { type: Date, default: Date.now },
     description: { type: String },
+    txHash: { type: String, default: null },
   }],
   skills: [{
     type: String,

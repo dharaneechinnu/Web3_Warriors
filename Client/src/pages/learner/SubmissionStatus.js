@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import api from "../../services/api";
+import { assetUrl } from "../../config";
 
 const statusColors = {
   submitted: "bg-yellow-700 text-yellow-100",
@@ -118,7 +119,7 @@ const SubmissionStatus = () => {
                 )}
 
                 {sub.fileUrl && (
-                  <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-purple-400 text-sm underline block mb-3">
+                  <a href={assetUrl(sub.fileUrl)} target="_blank" rel="noreferrer" className="text-purple-400 text-sm underline block mb-3">
                     📎 View submitted file
                   </a>
                 )}

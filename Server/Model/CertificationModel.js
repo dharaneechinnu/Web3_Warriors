@@ -36,6 +36,14 @@ const certificationSchema = new mongoose.Schema({
   certificateId: {
     type: String,
     unique: true
+  },
+  txHash: {
+    type: String,
+    default: null
+  },
+  nftTokenId: {
+    type: Number,
+    default: null
   }
 }, {
   timestamps: true

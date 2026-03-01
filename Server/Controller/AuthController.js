@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const PASS = process.env.PASS;
 const nodemailer = require('nodemailer');
+const { web3, adminAccount } = require('../web3/web3Provider');
+const tokenContractService = require('../web3/tokenContract');
 
 function generateOTP() {
     return Math.floor(1000 + Math.random() * 9000).toString();
@@ -103,8 +105,8 @@ const register = async (req, res) => {
         // Hash the password
         const hashpwd = await bcrypt.hash(password, 10);
 
-        // Set initial balance depending on role (learners get 10 by default)
-        const initialBalance = userRole === 'mentor' ? 0 : 10;
+        // Every user (learner + mentor) starts with 10 tokens
+        const initialBalance = 10;
 
         // Process skills: convert comma-separated string to array
         let skillsArray = [];
@@ -125,6 +127,30 @@ const register = async (req, res) => {
             skills: skillsArray,
         });
 
+        // ── Web3: Generate wallet & register on-chain ────────────────────────
+        let walletAddress = null;
+        let registrationTxHash = null;
+        try {
+            // Create a fresh Ethereum account for this user
+            const newAcct = web3.eth.accounts.create();
+            walletAddress = newAcct.address;
+
+            // Register on-chain (mints 10 tokens for learners via smart contract)
+            const regResult = await tokenContractService.registerUser(walletAddress);
+            if (regResult.success) {
+                registrationTxHash = regResult.txHash;
+            }
+
+            // Persist wallet + txHash in DB
+            created.UserWalletAddress = walletAddress;
+            created.registrationTxHash = registrationTxHash;
+            await created.save();
+            console.log(`[AuthController] Wallet ${walletAddress} created & registered on-chain for ${email}`);
+        } catch (web3Err) {
+            // Blockchain failure should NOT block registration
+            console.error('[AuthController] Web3 registration failed (non-blocking):', web3Err.message);
+        }
+
         // Prepare role-specific success message
         const roleLabel = userRole === 'mentor' ? 'Mentor' : 'Learner';
 
@@ -137,6 +163,8 @@ const register = async (req, res) => {
             message: `${roleLabel} registered successfully`,
             role: userRole,
             balance: initialBalance,
+            walletAddress: walletAddress || null,
+            registrationTxHash: registrationTxHash || null,
             user: { id: created._id, email: created.email },
             otp: { sent: otpResult.success, message: otpResult.message }
         });

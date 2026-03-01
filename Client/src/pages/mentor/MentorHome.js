@@ -11,11 +11,9 @@ const PageContainer = styled.div`
   min-height: 100vh;
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.98) 100%);
   padding: 2rem;
-  padding-top: 6rem;
 
   @media (max-width: 768px) {
     padding: 1rem;
-    padding-top: 5rem;
   }
 `;
 

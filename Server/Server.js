@@ -20,6 +20,18 @@ require('./sockets/signaling')(io);
 const sessionController = require('./Controller/SessionController');
 sessionController.setIO(io);
 
+// Pass io to ChallengeController for real-time notifications
+const challengeController = require('./Controller/ChallengeController');
+challengeController.setIO(io);
+
+// Pass io to CourseController for enrollment/grading notifications
+const courseController = require('./Controller/CourseController');
+courseController.setIO(io);
+
+// ── Web3 health check on startup ──────────────────────────────────────────────
+const { checkConnection } = require('./web3/web3Provider');
+checkConnection();
+
 // Socket.IO: let authenticated users join their personal notification room
 io.on('connection', (socket) => {
     socket.on('join-notifications', (userId) => {
@@ -44,6 +56,7 @@ const uploadDirs = [
     'uploads/courses/resources',
     'uploads/courses/assignments',
     'uploads/assignments', // Add this for the new assignment uploads
+    'uploads/challenges',
     'uploads/images',
     'uploads/mentors'
 ];

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import api from "../../services/api";
+import { assetUrl } from "../../config";
 
 const MentorChallenges = () => {
   const [challenges, setChallenges] = useState([]);
@@ -344,7 +345,7 @@ const SubmissionCard = ({ sub, onRank }) => {
       </div>
       <p className="text-gray-300 text-sm mb-3">{sub.description}</p>
       {sub.fileUrl && (
-        <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-purple-400 text-sm underline block mb-3">
+        <a href={assetUrl(sub.fileUrl)} target="_blank" rel="noreferrer" className="text-purple-400 text-sm underline block mb-3">
           View submission file
         </a>
       )}

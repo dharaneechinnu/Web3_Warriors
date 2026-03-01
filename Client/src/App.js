@@ -1,7 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import Navbar from './components/Navbar';
+import ToastNotifications from './components/ToastNotifications';
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import CourseUpload from './pages/CourseUpload';
@@ -34,6 +36,7 @@ import MentorChallenges from './pages/mentor/MentorChallenges';
 import SessionManagement from './pages/mentor/SessionManagement';
 import SubmissionReview from './pages/mentor/SubmissionReview';
 import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
+import MentorMyCourses from './pages/mentor/MentorMyCourses';
 import BookSession from './pages/learner/BookSession';
 import VideoRoom from './pages/VideoRoom';
 
@@ -90,6 +93,7 @@ function AppRoutes() {
   return (
     <div className="min-h-screen bg-background-light text-gray-800">
       {!isVideoRoom && <Navbar />}
+      <ToastNotifications />
       <Routes>
         {/* Root: show landing page if unauthenticated, else redirect to role home */}
         <Route
@@ -227,6 +231,9 @@ function AppRoutes() {
         <Route path="/mentor/profile" element={
           <ProtectedRoute><MentorProfileDashboard /></ProtectedRoute>
         } />
+        <Route path="/mentor/my-courses" element={
+          <ProtectedRoute><MentorMyCourses /></ProtectedRoute>
+        } />
 
         {/* Catch all route - redirect based on auth state */}
         <Route path="*" element={
@@ -242,7 +249,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <NotificationProvider>
+          <AppRoutes />
+        </NotificationProvider>
       </AuthProvider>
     </Router>
   );

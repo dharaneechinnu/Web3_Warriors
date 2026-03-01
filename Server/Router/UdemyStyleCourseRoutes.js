@@ -432,47 +432,143 @@ router.get('/learn/:courseId', async (req, res) => {
   }
 });
 
-// Enroll in course
+// Enroll in course (1 token cost → goes to mentor)
 router.post('/enroll', async (req, res) => {
   try {
+    const User = require('../Model/UserModel');
     const { courseId, learnerId } = req.body;
-    // Defensive: ensure learnerId present
     const learnerIdVal = learnerId || req.body.userId || req.body.studentId;
 
+    const course = await UdemyCourse.findById(courseId);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
     // Prevent mentors from enrolling in their own course
-    try {
-      const course = await UdemyCourse.findById(courseId);
-      if (course && course.mentorId && learnerIdVal && String(course.mentorId) === String(learnerIdVal)) {
-        return res.status(403).json({ success: false, message: 'Mentors cannot enroll in their own course' });
-      }
-    } catch (err) {
-      console.warn('Error checking mentor self-enroll prevention in udemy route:', err);
+    if (course.mentorId && learnerIdVal && String(course.mentorId) === String(learnerIdVal)) {
+      return res.status(403).json({ success: false, message: 'Mentors cannot enroll in their own course' });
     }
-    
-    // Check if already enrolled - Progress tracking disabled
-    // const existingProgress = await StudentProgress.findOne({ courseId, learnerId });
-    // if (existingProgress) {
-    //   return res.status(403).json({ 
-    //     success: false, 
-    //     message: 'Already enrolled in this course' 
-    //   });
-    // }
-    
-    // Create progress record - Progress tracking disabled
-    // const progress = new Progress({
-    //   courseId,
-    //   learnerId,
-    //   progressPercentage: 0
-    // });
-    // await StudentProgress.save();
-    
+
+    // Check if already enrolled
+    if (course.enrolledStudents && course.enrolledStudents.includes(learnerIdVal)) {
+      return res.status(409).json({ success: false, message: 'Already enrolled in this course' });
+    }
+
+    // Token deduction: 1 token from learner → mentor
+    const tokenCost = 1;
+    const learner = await User.findById(learnerIdVal);
+    if (!learner) return res.status(404).json({ success: false, message: 'Learner not found' });
+
+    if ((learner.tokenBalance || 0) < tokenCost) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient tokens. You need ${tokenCost} token to enroll, but you have ${learner.tokenBalance || 0}.`
+      });
+    }
+
+    // Deduct from learner
+    learner.tokenBalance -= tokenCost;
+    learner.transactionHistory.push({
+      transactionType: 'spend',
+      amount: tokenCost,
+      description: `Enrolled in course: ${course.title}`,
+      timestamp: new Date()
+    });
+
+    // Credit to mentor
+    const mentor = await User.findById(course.mentorId);
+    if (mentor) {
+      mentor.tokenBalance = (mentor.tokenBalance || 0) + tokenCost;
+      mentor.transactionHistory.push({
+        transactionType: 'earn',
+        amount: tokenCost,
+        description: `Student enrolled in your course: ${course.title}`,
+        timestamp: new Date()
+      });
+    }
+
     // Add to course enrolled students
     await UdemyCourse.findByIdAndUpdate(
       courseId,
-      { $addToSet: { enrolledStudents: learnerId } }
+      { $addToSet: { enrolledStudents: learnerIdVal } }
     );
-    
-    res.json({ success: true, progress });
+
+    // Save user docs
+    const saveOps = [learner.save()];
+    if (mentor) saveOps.push(mentor.save());
+    await Promise.all(saveOps);
+
+    res.json({ success: true, message: 'Enrolled successfully', tokensDeducted: tokenCost, remainingTokens: learner.tokenBalance });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Enroll via URL param (used by LearnerCourseDashboard: POST /udemy-courses/enroll/:courseId)
+router.post('/enroll/:courseId', async (req, res) => {
+  try {
+    const User = require('../Model/UserModel');
+    const courseId = req.params.courseId;
+    const learnerIdVal = req.body.learnerId || req.body.userId || req.body.studentId || (req.user && req.user.userId);
+
+    // Try extracting learnerId from auth token if not in body
+    if (!learnerIdVal && req.headers.authorization) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.ACCESS_TOKEN);
+        req.body.learnerId = decoded.userId;
+      } catch (e) {}
+    }
+    const finalLearnerId = req.body.learnerId || learnerIdVal;
+    if (!finalLearnerId) return res.status(400).json({ success: false, message: 'Learner ID required' });
+
+    const course = await UdemyCourse.findById(courseId);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+    if (course.mentorId && String(course.mentorId) === String(finalLearnerId)) {
+      return res.status(403).json({ success: false, message: 'Mentors cannot enroll in their own course' });
+    }
+
+    if (course.enrolledStudents && course.enrolledStudents.includes(finalLearnerId)) {
+      return res.status(409).json({ success: false, message: 'Already enrolled' });
+    }
+
+    const tokenCost = 1;
+    const learner = await User.findById(finalLearnerId);
+    if (!learner) return res.status(404).json({ success: false, message: 'Learner not found' });
+
+    if ((learner.tokenBalance || 0) < tokenCost) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient tokens. You need ${tokenCost} token to enroll, but you have ${learner.tokenBalance || 0}.`
+      });
+    }
+
+    learner.tokenBalance -= tokenCost;
+    learner.transactionHistory.push({
+      transactionType: 'spend',
+      amount: tokenCost,
+      description: `Enrolled in course: ${course.title}`,
+      timestamp: new Date()
+    });
+
+    const mentor = await User.findById(course.mentorId);
+    if (mentor) {
+      mentor.tokenBalance = (mentor.tokenBalance || 0) + tokenCost;
+      mentor.transactionHistory.push({
+        transactionType: 'earn',
+        amount: tokenCost,
+        description: `Student enrolled in your course: ${course.title}`,
+        timestamp: new Date()
+      });
+    }
+
+    await UdemyCourse.findByIdAndUpdate(courseId, { $addToSet: { enrolledStudents: finalLearnerId } });
+
+    const saveOps = [learner.save()];
+    if (mentor) saveOps.push(mentor.save());
+    await Promise.all(saveOps);
+
+    res.json({ success: true, message: 'Enrolled successfully', tokensDeducted: tokenCost, remainingTokens: learner.tokenBalance });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

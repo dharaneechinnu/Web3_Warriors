@@ -12,6 +12,7 @@ const ChallengeSubmissionSchema = new mongoose.Schema({
     status: { type: String, enum: ['submitted', 'reviewed', 'rewarded'], default: 'submitted' },
     rank: { type: Number, default: null },
     rewardTokens: { type: Number, default: 0 },
+    rewardTxHash: { type: String, default: null },
     feedback: { type: String },
     score: { type: Number, min: 0, max: 100 },
     reviewedAt: { type: Date },

@@ -1,10 +1,12 @@
 const User = require('../Model/UserModel');
+const tokenContractService = require('../web3/tokenContract');
+const nftContractService = require('../web3/nftContract');
 
 // GET /wallet/:userId - Get wallet data (balance + transaction history)
 exports.getWallet = async (req, res) => {
     try {
         const { userId } = req.params;
-        const user = await User.findById(userId).select('name email tokenBalance transactionHistory role');
+        const user = await User.findById(userId).select('name email tokenBalance transactionHistory role UserWalletAddress');
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
@@ -20,13 +22,22 @@ exports.getWallet = async (req, res) => {
             .filter(t => t.transactionType === 'spend')
             .reduce((sum, t) => sum + t.amount, 0);
 
+        // Fetch on-chain balance if wallet address exists
+        let onChainBalance = null;
+        if (user.UserWalletAddress) {
+            const balResult = await tokenContractService.getBalance(user.UserWalletAddress);
+            if (balResult.success) onChainBalance = balResult.balance;
+        }
+
         res.json({
             success: true,
             wallet: {
                 userId: user._id,
                 name: user.name,
                 email: user.email,
+                walletAddress: user.UserWalletAddress || null,
                 balance: user.tokenBalance || 0,
+                onChainBalance,
                 totalEarned,
                 totalSpent,
                 transactions: sorted
@@ -92,6 +103,67 @@ exports.transferTokens = async (req, res) => {
         });
     } catch (error) {
         console.error('transferTokens error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// GET /wallet/token-balance/:userId - On-chain token balance only
+exports.getOnChainBalance = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId).select('UserWalletAddress name email');
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        if (!user.UserWalletAddress) {
+            return res.status(400).json({ success: false, message: 'User has no wallet address' });
+        }
+
+        const balResult = await tokenContractService.getBalance(user.UserWalletAddress);
+        if (!balResult.success) {
+            return res.status(500).json({ success: false, message: balResult.error });
+        }
+
+        res.json({
+            success: true,
+            userId: user._id,
+            walletAddress: user.UserWalletAddress,
+            onChainBalance: balResult.balance
+        });
+    } catch (error) {
+        console.error('getOnChainBalance error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// GET /wallet/nfts/:userId - Get user's NFTs from blockchain
+exports.getUserNFTs = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId).select('UserWalletAddress');
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        if (!user.UserWalletAddress) {
+            return res.json({ success: true, nfts: [] });
+        }
+
+        const nftResult = await nftContractService.getUserNFTs(user.UserWalletAddress);
+        if (!nftResult.success) {
+            return res.status(500).json({ success: false, message: nftResult.error });
+        }
+
+        // Fetch metadata for each NFT
+        const nfts = [];
+        for (const tokenId of nftResult.tokenIds) {
+            const metaResult = await nftContractService.getNftMeta(tokenId);
+            nfts.push({
+                tokenId,
+                ...(metaResult.success ? metaResult.meta : {})
+            });
+        }
+
+        res.json({ success: true, nfts });
+    } catch (error) {
+        console.error('getUserNFTs error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };

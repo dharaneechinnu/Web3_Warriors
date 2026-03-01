@@ -1,5 +1,6 @@
 const User = require("../Model/UserModel");
 const CertificationModel = require("../Model/CertificationModel");
+const Challenge = require("../Model/ChallengeModel");
 
 // Get all mentors
 const getMentors = async (req, res) => {
@@ -95,6 +96,38 @@ const updateUserProfile = async (req, res) => {
 
     // Save updated user details
     await user.save();
+
+    // Auto-update name in related collections when name changes
+    if (name) {
+      try {
+        // Update learnerName in all challenge submissions
+        await Challenge.updateMany(
+          { 'submissions.learnerId': userId },
+          { $set: { 'submissions.$[sub].learnerName': name } },
+          { arrayFilters: [{ 'sub.learnerId': userId }] }
+        );
+
+        // Update mentorName in challenges created by this user
+        await Challenge.updateMany(
+          { mentorId: userId },
+          { $set: { mentorName: name } }
+        );
+
+        // Update name in certificates
+        await CertificationModel.updateMany(
+          { userId: userId },
+          { $set: { learnerName: name } }
+        );
+        await CertificationModel.updateMany(
+          { mentorId: userId },
+          { $set: { mentorName: name } }
+        );
+
+        console.log(`[updateUserProfile] Propagated name change for user ${userId} to challenges & certificates`);
+      } catch (propError) {
+        console.error('[updateUserProfile] Name propagation error (non-fatal):', propError.message);
+      }
+    }
 
     res.status(200).json({ message: "Profile updated successfully", user });
   } catch (error) {

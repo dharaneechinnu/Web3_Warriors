@@ -5,6 +5,13 @@ const User = require("../Model/UserModel");
 const mongoose = require('mongoose');
 const { AssignmentSubmission } = require('../Model/CourseSystemModel');
 const fs = require('fs');
+const notifService = require('../services/notificationService');
+const tokenContractService = require('../web3/tokenContract');
+const nftContractService = require('../web3/nftContract');
+
+// io reference (set from Server.js)
+let io = null;
+exports.setIO = (ioInstance) => { io = ioInstance; };
 
 // Helper to build absolute URL for stored paths (normalize backslashes and ensure leading slash)
 const makeAbsolute = (baseUrl, p) => {
@@ -242,7 +249,7 @@ exports.getCourseById = async (req, res) => {
 
 exports.enrollInCourse = async (req, res) => {
     try {
-        const { learnerId, courseId, tokenCost = 5 } = req.body;  // Get learnerId, courseId, and tokenCost from the request body
+        const { learnerId, courseId, tokenCost = 1 } = req.body;  // Enrollment costs 1 token (goes to mentor)
         console.log(learnerId, courseId, tokenCost);
         
         // Check if the course exists
@@ -281,25 +288,72 @@ exports.enrollInCourse = async (req, res) => {
             });
         }
 
-        // Deduct tokens from learner's balance
+        // ── Web3: On-chain token transfer ─────────────────────────────────────
+        const mentorUser = await User.findById(course.mentorId || course.mentor);
+        let enrollTxHash = null;
+        if (learner.UserWalletAddress && mentorUser?.UserWalletAddress) {
+            const txResult = await tokenContractService.transferForCourse(
+                learner.UserWalletAddress,
+                mentorUser.UserWalletAddress,
+                tokenCost
+            );
+            if (!txResult.success) {
+                return res.status(400).json({
+                    message: `Blockchain transfer failed: ${txResult.error}`
+                });
+            }
+            enrollTxHash = txResult.txHash;
+            console.log(`[enrollInCourse] On-chain transfer tx: ${enrollTxHash}`);
+        } else {
+            console.warn('[enrollInCourse] Missing wallet address — skipping on-chain transfer');
+        }
+
+        // Deduct tokens from learner's DB balance (keep in sync)
         learner.tokenBalance -= tokenCost;
         
-        // Add transaction history
+        // Add spend transaction for learner
         learner.transactionHistory.push({
             transactionType: 'spend',
             amount: tokenCost,
             description: `Enrolled in course: ${course.title}`,
+            txHash: enrollTxHash || null,
             timestamp: new Date()
         });
+
+        // Credit tokens to mentor (enrollment fee goes to course mentor)
+        if (mentorUser) {
+            mentorUser.tokenBalance = (mentorUser.tokenBalance || 0) + tokenCost;
+            mentorUser.transactionHistory.push({
+                transactionType: 'earn',
+                amount: tokenCost,
+                description: `Student enrolled in your course: ${course.title}`,
+                txHash: enrollTxHash || null,
+                timestamp: new Date()
+            });
+        }
 
         // Enroll the learner by updating both course and user
         course.enrolledLearners.push(learnerId);
         learner.coursesEnrolled.push(courseId);
 
-        // Save both documents
-        await Promise.all([course.save(), learner.save()]);
+        // Save all documents (course + learner + mentor)
+        const saveOps = [course.save(), learner.save()];
+        if (mentorUser) saveOps.push(mentorUser.save());
+        await Promise.all(saveOps);
 
         console.log(`Enrollment completed. Course now has ${course.enrolledLearners.length} enrolled learners.`);
+
+        // Notify the mentor about new enrollment
+        const mentorId = course.mentorId || course.mentor;
+        if (mentorId) {
+            notifService.createNotification({
+                userId: mentorId,
+                type: 'course_enrolled',
+                title: 'New Student Enrolled!',
+                message: `${learner.name || learner.email} enrolled in "${course.title}"`,
+                metadata: { courseId: course._id, learnerId }
+            }, io);
+        }
 
         res.status(200).json({ 
             message: "Successfully enrolled in the course", 
@@ -319,40 +373,82 @@ exports.enrollInCourse = async (req, res) => {
 
 exports.getMentorCourses = async (req, res) => {
     try {
-        const mentorId = req.params.mentorId;  // Get mentorId from the URL
+        const mentorId = req.params.mentorId;
+        const { UdemyCourse } = require('../Model/CourseSystemModel');
 
-        // Find all courses for the mentor
-        const courses = await Course.find({ mentorId: mentorId });
+        // Query BOTH the old Course model and the new UdemyCourse model
+        const [oldCourses, udemyCourses] = await Promise.all([
+            Course.find({ mentorId }).lean(),
+            UdemyCourse.find({ mentorId }).lean()
+        ]);
 
-        // If no courses are found
-        if (!courses || courses.length === 0) {
-            return res.status(200).json({ courses: [] });
-        }
-
-        // Prepare the course data with enrolled learner count and all necessary fields
-        const coursesWithEnrollmentCount = courses.map(course => {
+        // Normalize old courses
+        const normalizedOld = (oldCourses || []).map(course => {
             const enrolledCount = course.enrolledLearners ? course.enrolledLearners.length : 0;
-            console.log(`Course "${course.title}" has ${enrolledCount} enrolled learners:`, course.enrolledLearners);
-            
             return {
                 _id: course._id,
                 title: course.title,
                 description: course.description,
                 price: course.price,
                 duration: course.duration,
-                level: course.level,
+                level: course.level || course.skillLevel || 'beginner',
                 category: course.category,
                 image: course.image,
                 thumbnail: course.thumbnail,
                 video: course.video,
                 createdAt: course.createdAt,
-                    enrolledLearnersCount: enrolledCount,
-                    enrolledCount: enrolledCount,
-                    enrolledLearners: course.enrolledLearners || []
+                enrolledLearnersCount: enrolledCount,
+                enrolledCount: enrolledCount,
+                enrolledLearners: course.enrolledLearners || [],
+                status: course.status || 'published',
+                source: 'legacy'
             };
         });
 
-        res.status(200).json({ courses: coursesWithEnrollmentCount });
+        // Normalize UdemyCourse entries
+        const normalizedUdemy = (udemyCourses || []).map(course => {
+            const sections = course.curriculum?.sections || [];
+            const totalLectures = sections.reduce((sum, s) => sum + (s.lectures?.length || 0), 0);
+            return {
+                _id: course._id,
+                title: course.title,
+                description: course.description,
+                price: course.price || 0,
+                duration: course.totalDuration || '',
+                level: course.skillLevel || 'beginner',
+                category: course.category || '',
+                image: course.thumbnail,
+                thumbnail: course.thumbnail,
+                video: course.promoVideo,
+                createdAt: course.createdAt,
+                enrolledLearnersCount: course.enrolledCount || 0,
+                enrolledCount: course.enrolledCount || 0,
+                enrolledLearners: [],
+                isPublished: course.isPublished,
+                status: course.status || (course.isPublished ? 'published' : 'draft'),
+                totalSections: sections.length,
+                totalLectures,
+                source: 'udemy'
+            };
+        });
+
+        // Merge and deduplicate by title (prefer udemy version if both exist)
+        const seenTitles = new Set();
+        const merged = [];
+        for (const c of normalizedUdemy) {
+            seenTitles.add(c.title?.toLowerCase());
+            merged.push(c);
+        }
+        for (const c of normalizedOld) {
+            if (!seenTitles.has(c.title?.toLowerCase())) {
+                merged.push(c);
+            }
+        }
+
+        // Sort by creation date, newest first
+        merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        res.status(200).json({ courses: merged });
     } catch (error) {
         console.error("Error fetching courses for mentor:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -2758,6 +2854,17 @@ exports.gradeSubmission = async (req, res) => {
             }
         }
 
+        // Notify the learner about grading
+        if (submission.studentId) {
+            notifService.createNotification({
+                userId: submission.studentId,
+                type: 'submission_graded',
+                title: `Assignment ${status === 'graded' ? 'Graded' : 'Reviewed'}`,
+                message: `Your submission for "${course.title}" was ${status}${grade ? ` — Grade: ${grade}` : ''}`,
+                metadata: { courseId: submission.courseId, submissionId, grade, status }
+            }, io);
+        }
+
         res.json({ success: true, message: 'Submission reviewed', submission });
     } catch (error) {
         console.error('gradeSubmission error:', error);
@@ -2904,6 +3011,24 @@ exports.generateCertificate = async (req, res) => {
             completedDate: new Date(),
             grade: 'Pass'
         });
+
+        // ── Web3: Mint course-completion NFT ────────────────────────────
+        if (user.UserWalletAddress) {
+            try {
+                const mintResult = await nftContractService.mintCourseNFT(
+                    user.UserWalletAddress,
+                    course.title
+                );
+                if (mintResult.success) {
+                    certificate.txHash = mintResult.txHash;
+                    certificate.nftTokenId = mintResult.tokenId != null ? Number(mintResult.tokenId) : null;
+                    await certificate.save();
+                    console.log(`[generateCertificate] NFT minted → tx ${mintResult.txHash}, tokenId=${mintResult.tokenId}`);
+                }
+            } catch (nftErr) {
+                console.error('[generateCertificate] NFT mint failed (non-blocking):', nftErr.message);
+            }
+        }
 
         return res.status(201).json({
             success: true,

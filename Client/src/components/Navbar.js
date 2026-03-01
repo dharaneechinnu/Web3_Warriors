@@ -1,32 +1,43 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import styled, { keyframes, css } from "styled-components"
+import styled from "styled-components"
 import { useAuth } from "../contexts/AuthContext"
+import { useNotifications, getNotifMeta } from "../contexts/NotificationContext"
 import TokenStorage from "../utils/tokenStorage"
-import api from "../services/api"
-import { io as socketIO } from "socket.io-client"
-import { SOCKET_URL } from "../config"
 
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-`
-
-const NavbarContainer = styled.header`
-  ${props => css`animation: ${fadeIn} 0.6s ease-out;`}
-  background: rgba(15, 23, 42, 0.98);
-  backdrop-filter: blur(12px);
-  padding: 0;
+const NavWrapper = styled.div`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
+  height: ${props => props.visible ? 'auto' : '6px'};
+  transition: height 0.1s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(to right, rgba(6, 182, 212, 0.4), rgba(217, 70, 239, 0.4), rgba(249, 115, 22, 0.4));
+    opacity: ${props => props.visible ? 0 : 0.7};
+    transition: opacity 0.3s ease;
+    z-index: 1001;
+  }
+`
+
+const NavbarContainer = styled.header`
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(12px);
+  padding: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 24px rgba(0,0,0,0.40);
-  transition: box-shadow 0.25s ease;
+  transform: translateY(${props => props.visible ? '0' : '-100%'});
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
 `
 
 const NavInner = styled.div`
@@ -528,6 +539,21 @@ const Navbar = () => {
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(null) // 'courses' | 'tools' | 'compete'
+  const [navVisible, setNavVisible] = useState(false)
+  const hideTimeoutRef = useRef(null)
+
+  const showNav = () => {
+    if (hideTimeoutRef.current) { clearTimeout(hideTimeoutRef.current); hideTimeoutRef.current = null; }
+    setNavVisible(true)
+  }
+
+  const hideNav = () => {
+    hideTimeoutRef.current = setTimeout(() => {
+      setNavVisible(false)
+      setOpenDropdown(null)
+      setUserMenuOpen(false)
+    }, 400)
+  }
 
   const closeDropdowns = () => setOpenDropdown(null)
   const toggleDropdown = (name) => setOpenDropdown(prev => prev === name ? null : name)
@@ -552,85 +578,10 @@ const Navbar = () => {
     setUserMenuOpen(false)
   }, [location.pathname])
 
-  // ── Helper: map notification type → route ──
-  const getNotificationRoute = useCallback((notif) => {
-    const role = localStorage.getItem('userRole') || 'learner';
-    switch (notif.type) {
-      case 'booking_request':   return '/mentor/sessions';
-      case 'booking_accepted':  return '/sessions';
-      case 'booking_rejected':  return '/sessions';
-      case 'session_reminder':  return role === 'mentor' ? '/mentor/sessions' : '/sessions';
-      case 'session_completed': return role === 'mentor' ? '/mentor/sessions' : '/sessions';
-      case 'session_cancelled': return role === 'mentor' ? '/mentor/sessions' : '/sessions';
-      default:                  return null;
-    }
-  }, []);
-  
-  // ── Real notifications from API ──
-  const [notifications, setNotifications] = useState([]);
-
-  const fetchNotifications = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    try {
-      const res = await api.get('/notifications', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.data.success) setNotifications(res.data.notifications || []);
-    } catch (err) {
-      // silent — notifications are non-critical
-    }
-  }, []);
-
-  // Fetch on mount + poll every 30s
-  useEffect(() => {
-    fetchNotifications();
-    const timer = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(timer);
-  }, [fetchNotifications]);
-
-  // Socket.IO real-time notifications
-  useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (!userId) return;
-    const socket = socketIO(SOCKET_URL, { transports: ['websocket'] });
-    socket.emit('join-notifications', userId);
-    socket.on('new-notification', (notif) => {
-      setNotifications(prev => [notif, ...prev]);
-      // Browser / Chrome push notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          const browserNotif = new Notification(notif.title, {
-            body: notif.message,
-            icon: '/logo192.png',
-            tag: notif._id || 'notif',
-            requireInteraction: false,
-          });
-          browserNotif.onclick = () => {
-            window.focus();
-            const route = getNotificationRoute(notif);
-            if (route) window.location.href = route;
-            browserNotif.close();
-          };
-        } catch (e) {
-          console.warn('Browser notification failed:', e);
-        }
-      }
-    });
-    return () => socket.disconnect();
-  }, []);
-
-  // Request browser notification permission on auth
-  useEffect(() => {
-    if (isAuthenticated && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(p => {
-          console.log('Notification permission:', p);
-        }).catch(() => {});
-      }
-    }
-  }, [isAuthenticated]);
-
-  // Count unread notifications
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // ── Notifications from centralized context ──
+  const {
+    notifications, unreadCount, markAsRead, markAllAsRead, getNotificationRoute
+  } = useNotifications()
 
   // Get user data from auth context or fallback to localStorage
   const userName = user?.name || user?.email?.charAt(0).toUpperCase() || "U";
@@ -708,7 +659,12 @@ const Navbar = () => {
 
   return (
     <>
-      <NavbarContainer scrolled={scrolled} ref={navRef}>
+      <NavWrapper
+        visible={navVisible}
+        onMouseEnter={showNav}
+        onMouseLeave={hideNav}
+      >
+      <NavbarContainer scrolled={scrolled} ref={navRef} visible={navVisible}>
         <NavInner>
           <Logo>
             <LogoIcon>B3</LogoIcon>
@@ -731,7 +687,7 @@ const Navbar = () => {
                       </NavDropdownTrigger>
                       <NavDropdownMenu open={openDropdown === 'courses'}>
                         <NavDropdownItem to="/course-upload" onClick={closeDropdowns}>➕ Upload Course</NavDropdownItem>
-                        <NavDropdownItem to="/mentor-home" onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
+                        <NavDropdownItem to="/mentor/my-courses" onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
                         <NavDropdownItem to="/mentor/submissions" onClick={closeDropdowns}>📋 Review Submissions</NavDropdownItem>
                       </NavDropdownMenu>
                     </NavDropdown>
@@ -825,6 +781,7 @@ const Navbar = () => {
           <MobileMenuButton onClick={() => setMobileMenuOpen(true)}>☰</MobileMenuButton>
         </NavInner>
       </NavbarContainer>
+      </NavWrapper>
 
       {/* Notification Modal Overlay */}
       <Overlay isOpen={notificationOpen} onClick={() => setNotificationOpen(false)} />
@@ -836,13 +793,7 @@ const Navbar = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {unreadCount > 0 && (
               <button
-                onClick={async () => {
-                  const token = localStorage.getItem('token');
-                  try {
-                    await api.patch('/notifications/read-all', {}, { headers: { Authorization: `Bearer ${token}` } });
-                    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-                  } catch {}
-                }}
+                onClick={() => markAllAsRead()}
                 style={{
                   background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: 'none',
                   borderRadius: '0.4rem', padding: '0.3rem 0.6rem', fontSize: '0.72rem',
@@ -859,23 +810,19 @@ const Navbar = () => {
         </NotificationModalHeader>
         <NotificationModalContent>
           {notifications.length > 0 ? (
-            notifications.map((notification) => (
+            notifications.map((notification) => {
+              const meta = getNotifMeta(notification.type);
+              return (
               <NotificationItem 
                 key={notification._id} 
                 type={notification.type}
-                style={{ opacity: notification.isRead ? 0.6 : 1, cursor: 'pointer' }}
-                onClick={async () => {
-                  // Mark as read
-                  if (!notification.isRead) {
-                    const token = localStorage.getItem('token');
-                    try {
-                      await api.patch(`/notifications/read/${notification._id}`, {}, { headers: { Authorization: `Bearer ${token}` } });
-                      setNotifications(prev => prev.map(n => 
-                        n._id === notification._id ? { ...n, isRead: true } : n
-                      ));
-                    } catch {}
-                  }
-                  // Navigate to the relevant page
+                style={{ 
+                  opacity: notification.isRead ? 0.6 : 1, 
+                  cursor: 'pointer',
+                  borderLeftColor: meta.color
+                }}
+                onClick={() => {
+                  if (!notification.isRead) markAsRead(notification._id);
                   const route = getNotificationRoute(notification);
                   if (route) {
                     setNotificationOpen(false);
@@ -884,7 +831,8 @@ const Navbar = () => {
                 }}
               >
                 <NotificationItemTitle>
-                  {!notification.isRead && <span style={{ color: '#f59e0b', marginRight: '0.3rem' }}>●</span>}
+                  {!notification.isRead && <span style={{ color: meta.color, marginRight: '0.3rem' }}>●</span>}
+                  <span style={{ marginRight: '0.4rem' }}>{meta.icon}</span>
                   {notification.title}
                 </NotificationItemTitle>
                 <NotificationItemMessage>{notification.message}</NotificationItemMessage>
@@ -892,9 +840,14 @@ const Navbar = () => {
                   {notification.createdAt ? new Date(notification.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
                 </NotificationItemTime>
               </NotificationItem>
-            ))
+              );
+            })
           ) : (
-            <EmptyNotifications>No notifications</EmptyNotifications>
+            <EmptyNotifications>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔔</div>
+              <div style={{ fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: '0.25rem' }}>No notifications yet</div>
+              <div style={{ fontSize: '0.85rem' }}>You'll see updates about sessions, challenges, and more here</div>
+            </EmptyNotifications>
           )}
         </NotificationModalContent>
       </NotificationModal>
@@ -923,7 +876,7 @@ const Navbar = () => {
               <MobileNavLink to="/mentor/profile" onClick={() => setMobileMenuOpen(false)}>👤 My Profile</MobileNavLink>
               <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Courses</div>
               <MobileNavLink to="/course-upload" onClick={() => setMobileMenuOpen(false)}>➕ Upload Course</MobileNavLink>
-              <MobileNavLink to="/mentor-home" onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
+              <MobileNavLink to="/mentor/my-courses" onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
               <MobileNavLink to="/mentor/submissions" onClick={() => setMobileMenuOpen(false)}>📋 Review Submissions</MobileNavLink>
               <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Tools</div>
               <MobileNavLink to="/mentor/sessions" onClick={() => setMobileMenuOpen(false)}>📅 Manage Sessions</MobileNavLink>

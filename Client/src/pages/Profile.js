@@ -8,7 +8,7 @@ const ProfileContainer = styled.div`
   min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
   color: white;
-  padding-top: 100px;
+  padding-top: 20px;
 `;
 
 const ProfileHeader = styled.div`
@@ -260,6 +260,10 @@ const Profile = () => {
       await api.put(`/User/profile/${currentUserId}`, editForm);
       setProfile({ ...profile, ...editForm });
       setIsEditing(false);
+      // Keep localStorage in sync so other pages (challenges, etc.) use the updated name
+      if (editForm.name) {
+        localStorage.setItem('userName', editForm.name);
+      }
     } catch (error) {
       console.error('Error updating profile:', error);
     }
