@@ -58,6 +58,7 @@ const S = {
     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
     color: "#fff", fontSize: "0.95rem", boxSizing: "border-box", outline: "none"
   },
+
   label: { display: "block", marginBottom: "0.35rem", color: "#94a3b8", fontSize: "0.85rem", fontWeight: 600 },
   alert: (t) => ({
     padding: "0.9rem 1.1rem", borderRadius: "0.6rem", marginBottom: "1rem",
@@ -463,8 +464,8 @@ export default function BookSession() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                 <div>
                   <label style={S.label}>Duration</label>
-                  <select style={S.input} value={duration} onChange={e => setDuration(e.target.value)}>
-                    {[30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
+                  <select style={{ ...S.input, background: "#1e293b", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }} value={duration} onChange={e => setDuration(e.target.value)}>
+                    {[30, 45, 60, 90, 120].map(d => <option key={d} value={d} style={{ background: "#1e293b", color: "#fff" }}>{d} min</option>)}
                   </select>
                 </div>
                 <div>
