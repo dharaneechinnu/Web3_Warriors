@@ -109,6 +109,7 @@ export default function VideoRoom() {
   const chatEndRef     = useRef(null);
   const offerSent      = useRef(false);
   const remoteSockId   = useRef(null);
+  const iceRestarts    = useRef(0);        // limit ICE restart attempts
 
   /* state */
   const [joined, setJoined]               = useState(false);       // lobby → in-call
@@ -215,10 +216,13 @@ export default function VideoRoom() {
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC] iceConnectionState: ${pc.iceConnectionState}`);
-      if (pc.iceConnectionState === "failed") {
-        // Attempt ICE restart when connection fails (common in production NATs)
-        console.warn("[WebRTC] ICE failed — attempting restart");
+      if (pc.iceConnectionState === "failed" && iceRestarts.current < 3) {
+        iceRestarts.current += 1;
+        console.warn(`[WebRTC] ICE failed — restart attempt ${iceRestarts.current}/3`);
         pc.restartIce();
+      }
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        iceRestarts.current = 0;
       }
     };
 
