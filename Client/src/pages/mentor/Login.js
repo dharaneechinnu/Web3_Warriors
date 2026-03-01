@@ -124,6 +124,11 @@ function LoginMentor() {
           setError(loginResult.error || 'Login failed');
         }
       } else {
+        // If email not verified, redirect to verification page
+        if (data.needsVerification) {
+          navigate('/verify/mentor', { state: { email: data.email || formData.email } });
+          return;
+        }
         setError(data.message || 'Invalid email or password');
       }
     } catch (err) {

@@ -52,15 +52,15 @@ function RegisterMentor(){
 
         <Form onSubmit={handleSubmit}>
           <Row>
-            <Input label="Full Name" name="name" value={formData.name} onChange={handleChange} required />
-            <Input label="Email" type="email" name="email" value={formData.email} onChange={handleChange} required />
+            <Input name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} required />
+            <Input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
           </Row>
           <Row>
-            <Input label="Password" type="password" name="password" value={formData.password} onChange={handleChange} required />
-            <Input label="Mobile Number" type="tel" name="mobileNo" value={formData.mobileNo} onChange={handleChange} required />
+            <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
+            <Input type="tel" name="mobileNo" placeholder="Mobile Number" value={formData.mobileNo} onChange={handleChange} required />
           </Row>
           <Row>
-            <Input label="Date of Birth" type="date" name="dob" value={formData.dob} onChange={handleChange} required />
+            <Input type="date" name="dob" placeholder="Date of Birth" value={formData.dob} onChange={handleChange} required />
             <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
               <label style={{fontSize:'0.875rem',fontWeight:500,color:'rgba(255,255,255,0.9)'}}>Gender</label>
               <select 
@@ -86,7 +86,7 @@ function RegisterMentor(){
               </select>
             </div>
           </Row>
-          <Input label="Skills (comma separated)" name="skills" value={formData.skills} onChange={handleChange} placeholder="e.g. React, Blockchain" />
+          <Input name="skills" placeholder="Skills (comma separated, e.g. React, Blockchain)" value={formData.skills} onChange={handleChange} />
           <Button type="submit" disabled={loading}>{loading ? 'Creating Account...' : 'Create Account'}</Button>
         </Form>
 

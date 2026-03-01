@@ -52,7 +52,7 @@ async function sendVerificationOtpToUser(user) {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-console.log(email,password)
+
         if (!email || !password) {
             return res.status(400).json({ message: "Enter all fields" });
         }
@@ -60,6 +60,11 @@ console.log(email,password)
         const user = await usermodel.findOne({ email: email });
         if (!user) {
             return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if user has verified their email
+        if (!user.verified) {
+            return res.status(403).json({ message: "Please verify your email before logging in", needsVerification: true, email: user.email });
         }
 
         const isValidate = await bcrypt.compare(password, user.password);
@@ -195,11 +200,11 @@ const gtpOtps = async (req, res) => {
         }
 
         const result = await sendVerificationOtpToUser(user);
-        if (result.success) return res.status(200).json({ message: result.message });
-        return res.status(500).json({ message: result.message });
+        if (result.success) return res.status(200).json({ success: true, message: result.message });
+        return res.status(500).json({ success: false, message: result.message });
     } catch (error) {
         console.error("Error generating OTP:", error);
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 const Verifyotp = async (req, res) => {
@@ -232,9 +237,9 @@ const Verifyotp = async (req, res) => {
 
             await user.save(); 
 
-            res.status(200).json({ message: "OTP verified successfully" });
+            res.status(200).json({ success: true, message: "OTP verified successfully" });
         } else {
-            return res.status(400).json({ message: "Invalid OTP" });
+            return res.status(400).json({ success: false, message: "Invalid OTP" });
         }
     } catch (error) {
         console.error("Error verifying OTP:", error);
@@ -289,11 +294,11 @@ const resetPassword = async(req,res) =>{
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
                 console.error("Error sending password reset email:", error);
-                return res.status(500).json({ message: "Failed to send password reset email" });
+                return res.status(500).json({ success: false, message: "Failed to send password reset email" });
             }
           
-            console.log("Password reset email sent:", info.response,token);
-            res.status(200).json({ message: "Password reset email sent" });
+            console.log("Password reset email sent:", info.response);
+            res.status(200).json({ success: true, message: "Password reset OTP sent to your email" });
         });
     } catch (error) {
         console.error("Error resetting password:", error);
@@ -326,7 +331,7 @@ const respassword = async (req, res) => {
         await user.save();
 
         console.log("Password reset successfully");
-        res.status(200).json({ message: "Password reset successfully" });
+        res.status(200).json({ success: true, message: "Password reset successfully" });
 
     } catch (error) {
         console.error("Error resetting password:", error);

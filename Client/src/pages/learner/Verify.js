@@ -55,8 +55,8 @@ export default function VerifyLearner(){
         {error && <Paragraph style={{color:'#fda4af'}}>{error}</Paragraph>}
 
         <form onSubmit={handleVerify} style={{display:'grid',gap:12,marginTop:16}}>
-          <Input label="Email" type="email" name="email" value={email} disabled />
-          <Input label="OTP" name="otp" value={otp} onChange={(e)=>setOtp(e.target.value)} placeholder="Enter 4-digit OTP" required />
+          <Input type="email" name="email" placeholder="Email" value={email} disabled />
+          <Input name="otp" value={otp} onChange={(e)=>setOtp(e.target.value)} placeholder="Enter 4-digit OTP" required />
           <div style={{display:'flex',gap:12}}>
             <Button type="submit" disabled={loading}>{loading ? 'Verifying...' : 'Verify'}</Button>
             <Button type="button" variant="secondary" onClick={resend}>Resend OTP</Button>

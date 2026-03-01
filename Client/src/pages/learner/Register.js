@@ -52,21 +52,37 @@ function RegisterLearner(){
 
         <Form onSubmit={handleSubmit}>
           <Row>
-            <Input label="Full Name" name="name" value={formData.name} onChange={handleChange} required />
-            <Input label="Email" type="email" name="email" value={formData.email} onChange={handleChange} required />
+            <Input name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} required />
+            <Input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
           </Row>
           <Row>
-            <Input label="Password" type="password" name="password" value={formData.password} onChange={handleChange} required />
-            <Input label="Mobile Number" type="tel" name="mobileNo" value={formData.mobileNo} onChange={handleChange} required />
+            <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
+            <Input type="tel" name="mobileNo" placeholder="Mobile Number" value={formData.mobileNo} onChange={handleChange} required />
           </Row>
           <Row>
-            <Input label="Date of Birth" type="date" name="dob" value={formData.dob} onChange={handleChange} required />
-            <Input label="Gender" type="select" name="gender" value={formData.gender} onChange={handleChange} required>
-              <option value="">Select</option>
+            <Input type="date" name="dob" placeholder="Date of Birth" value={formData.dob} onChange={handleChange} required />
+            <select
+              name="gender"
+              value={formData.gender}
+              onChange={handleChange}
+              required
+              style={{
+                flex:1,
+                height:'2.5rem',
+                borderRadius:'0.375rem',
+                border:'1px solid rgba(124,58,237,0.3)',
+                background:'rgba(17,17,27,0.8)',
+                color:'#fff',
+                padding:'0 0.75rem',
+                fontSize:'0.875rem',
+                outline:'none',
+              }}
+            >
+              <option value="">Select Gender</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
-            </Input>
+            </select>
           </Row>
           <Button type="submit" disabled={loading}>{loading ? 'Creating Account...' : 'Create Account'}</Button>
         </Form>

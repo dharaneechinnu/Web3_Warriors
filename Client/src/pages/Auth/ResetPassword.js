@@ -1,8 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import axios from 'axios';
-import { API_BASE_URL } from '../../config';
+import styled from 'styled-components';
+import { motion, AnimatePresence } from 'framer-motion';
+import api from '../../services/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import AuthBackground from '@/components/ui/AuthBackground';
+import { Heading2, Paragraph, GradientSpan } from '@/components/ui/Typography';
+
+const PageContainer = styled.div`
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(79, 70, 229, 0.04));
+`;
+
+const Card = styled(motion.div)`
+  width: 100%;
+  max-width: 450px;
+  background: rgba(17, 17, 27, 0.7);
+  backdrop-filter: blur(20px);
+  border-radius: 1.5rem;
+  padding: 3rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  position: relative;
+  z-index: 1;
+`;
+
+const Form = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+`;
+
+const ErrorMessage = styled(motion.div)`
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  text-align: center;
+  font-size: 0.9rem;
+`;
+
+const AuthLinks = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+`;
+
+const AuthLink = styled(Link)`
+  color: rgba(124, 58, 237, 0.8);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+  &:hover { color: #7c3aed; }
+`;
 
 function ResetPassword() {
   const navigate = useNavigate();
@@ -17,7 +78,6 @@ function ResetPassword() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Get email and OTP from location state
     if (location.state?.email && location.state?.otp) {
       setFormData(prev => ({
         ...prev,
@@ -25,7 +85,6 @@ function ResetPassword() {
         otp: location.state.otp
       }));
     } else {
-      // If no email and OTP, redirect to forgot password
       navigate('/forgot-password');
     }
   }, [location.state, navigate]);
@@ -33,6 +92,11 @@ function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (formData.newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
     if (formData.newPassword !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -42,14 +106,13 @@ function ResetPassword() {
       setError(null);
       setLoading(true);
       
-      const response = await axios.post(`${API_BASE_URL}/api/auth/reset-password`, {
-        email: formData.email,
-        otp: formData.otp,
-        newPassword: formData.newPassword
+      const response = await api.patch('/Auth/resetpass-otp', {
+        token: formData.otp,
+        pwd: formData.newPassword
       });
 
       if (response.data.success) {
-        navigate('/login', { state: { message: 'Password reset successful! Please login.' } });
+        navigate('/login/learner', { state: { message: 'Password reset successful! Please login.' } });
       }
     } catch (err) {
       console.error('Password reset error:', err);
@@ -61,84 +124,68 @@ function ResetPassword() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <motion.div
+    <PageContainer>
+      <AuthBackground />
+      <Card
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md"
+        transition={{ duration: 0.5 }}
       >
-        <h1 className="text-3xl font-bold text-center mb-8 text-white">Reset Password</h1>
-        
-        {error && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-red-500/20 text-red-500 p-4 rounded-lg mb-6"
-          >
-            {error}
-          </motion.div>
-        )}
+        <Heading2 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          Reset <GradientSpan>Password</GradientSpan>
+        </Heading2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-gray-400 mb-2">New Password</label>
-            <input
-              type="password"
-              name="newPassword"
-              value={formData.newPassword}
-              onChange={handleInputChange}
-              required
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter new password"
-            />
-          </div>
+        <AnimatePresence>
+          {error && (
+            <ErrorMessage initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {error}
+            </ErrorMessage>
+          )}
+        </AnimatePresence>
 
-          <div>
-            <label className="block text-gray-400 mb-2">Confirm Password</label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              required
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Confirm new password"
-            />
-          </div>
+        <Form onSubmit={handleSubmit}>
+          <Input
+            type="password"
+            name="newPassword"
+            value={formData.newPassword}
+            onChange={handleInputChange}
+            required
+            placeholder="Enter new password"
+          />
 
-          <button
+          <Input
+            type="password"
+            name="confirmPassword"
+            value={formData.confirmPassword}
+            onChange={handleInputChange}
+            required
+            placeholder="Confirm new password"
+          />
+
+          <Button
             type="submit"
             disabled={loading}
-            className={`w-full py-2 px-4 rounded-lg ${
-              loading
-                ? 'bg-blue-500/50 cursor-not-allowed'
-                : 'bg-blue-500 hover:bg-blue-600'
-            } transition-colors text-white font-medium`}
+            style={{
+              marginTop: '0.5rem',
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
           >
             {loading ? 'Resetting Password...' : 'Reset Password'}
-          </button>
-        </form>
+          </Button>
+        </Form>
 
-        <div className="mt-6 text-center">
-          <p className="text-gray-400">
-            Remember your password?{' '}
-            <Link
-              to="/login"
-              className="text-blue-500 hover:text-blue-400"
-            >
-              Login here
-            </Link>
-          </p>
-        </div>
-      </motion.div>
-    </div>
+        <AuthLinks>
+          <AuthLink to="/forgot-password">Back to Forgot Password</AuthLink>
+          <AuthLink to="/login/learner">Login as Learner</AuthLink>
+          <AuthLink to="/login/mentor">Login as Mentor</AuthLink>
+        </AuthLinks>
+      </Card>
+    </PageContainer>
   );
 }
 
