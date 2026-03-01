@@ -162,7 +162,7 @@ export const NotificationProvider = ({ children }) => {
     const userId = localStorage.getItem('userId');
     if (!userId) return;
 
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.emit('join-notifications', userId);

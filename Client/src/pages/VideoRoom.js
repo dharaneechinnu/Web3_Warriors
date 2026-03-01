@@ -11,7 +11,35 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    // TURN servers for NAT traversal in production (override via env vars)
+    ...(process.env.REACT_APP_TURN_URL
+      ? [{
+          urls: process.env.REACT_APP_TURN_URL,
+          username: process.env.REACT_APP_TURN_USERNAME || "",
+          credential: process.env.REACT_APP_TURN_CREDENTIAL || "",
+        }]
+      : [
+          {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+        ]),
   ],
+  iceCandidatePoolSize: 10,
 };
 
 /* ─── SVG Icon components ─────────────────────────────────────── */
@@ -178,9 +206,19 @@ export default function VideoRoom() {
     };
 
     pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC] connectionState: ${pc.connectionState}`);
       if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
         setConnected(false);
         setStatus("Peer disconnected");
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] iceConnectionState: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === "failed") {
+        // Attempt ICE restart when connection fails (common in production NATs)
+        console.warn("[WebRTC] ICE failed — attempting restart");
+        pc.restartIce();
       }
     };
 
@@ -218,13 +256,22 @@ export default function VideoRoom() {
     if (!joined) return;
     let socket;
 
-    /* Connect Socket.IO */
-    socket = io(SOCKET_URL, { transports: ["websocket"] });
+    /* Connect Socket.IO — allow polling fallback for reverse-proxy compat */
+    socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       setStatus("Connected to server. Waiting for peer\u2026");
       socket.emit("join-room", { roomId, userId, userName, role });
+    });
+
+    socket.on("connect_error", (err) => {
+      console.warn("Socket connection error:", err.message);
+      setStatus("Connection error. Retrying\u2026");
     });
 
     /* 3. Someone already in room → I am the offerer */
