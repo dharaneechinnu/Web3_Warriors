@@ -32,6 +32,7 @@ jobs:
             
             cd Server
             npm install
+            npm install uuid@9 --save
             pm2 restart Server
             
             cd ../Client
