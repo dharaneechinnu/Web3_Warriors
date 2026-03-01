@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import api from "../../services/api";
+import { API_BASE_URL } from "../../config";
 
 // ============= STYLED COMPONENTS =============
 
@@ -406,7 +407,7 @@ const MentorMyCourses = () => {
   const [filter, setFilter] = useState("all");
 
   const userId = localStorage.getItem("userId");
-  const baseUrl = "http://localhost:3500";
+  const baseUrl = API_BASE_URL;
 
   useEffect(() => {
     fetchCourses();

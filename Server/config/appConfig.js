@@ -12,8 +12,8 @@
 require('dotenv').config();
 
 const PORT       = process.env.PORT       || 3500;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
-const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
+const CLIENT_URL = process.env.CLIENT_URL || 'http://187.124.96.177:3000';
+const SERVER_URL = process.env.SERVER_URL || `http://187.124.96.177:3500`;
 
 module.exports = {
   PORT,
