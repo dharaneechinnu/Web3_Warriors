@@ -1,15 +1,19 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Repository-level .gitignore for monorepo
 
 # dependencies
-node_modules/
+/Client/node_modules
+/Server/node_modules
+/node_modules
 /.pnp
 .pnp.js
 .env
+
 # testing
 /coverage
 
 # production
 /build
+/uploads
 
 # misc
 .DS_Store
