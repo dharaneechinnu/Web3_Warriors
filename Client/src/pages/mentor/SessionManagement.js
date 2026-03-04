@@ -2,6 +2,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
+import { getMyApplication } from "../../services/mentorApplicationService";
 
 /* -- helpers -- */
 const tok = () => localStorage.getItem("token");
@@ -73,11 +74,12 @@ const SessionManagement = () => {
   const navigate = useNavigate();
   const mentorId = uid();
 
-  const [tab, setTab]         = useState("pending");
-  const [all, setAll]         = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [tab, setTab]                   = useState("pending");
+  const [all, setAll]                   = useState([]);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState(null);
+  const [success, setSuccess]           = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState(null); // null|'pending'|'approved'|'rejected'|'not_applied'
 
   /* -- fetch all mentor sessions -- */
   const fetchAll = useCallback(async () => {
@@ -92,7 +94,19 @@ const SessionManagement = () => {
     finally { setLoading(false); }
   }, [mentorId]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    // Check verification status before loading sessions
+    getMyApplication().then(res => {
+      if (res.success) {
+        setVerificationStatus(res.data?.application?.mentorStatus || 'pending');
+      } else if (res.notFound) {
+        setVerificationStatus('not_applied');
+      } else {
+        setVerificationStatus('pending');
+      }
+    });
+    fetchAll();
+  }, [fetchAll]);
 
   /* -- derived lists -- */
   const pending   = all.filter(s => s.status === "pending" || s.status === "requested");
@@ -168,6 +182,66 @@ const SessionManagement = () => {
   };
 
   /* -- render -- */
+
+  // Block the page entirely until verification is confirmed
+  if (verificationStatus !== null && verificationStatus !== 'approved') {
+    const isRejected = verificationStatus === 'rejected';
+    return (
+      <div style={S.page}>
+        <div style={{ ...S.wrap, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            style={{
+              background: isRejected ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+              border: `1px solid ${isRejected ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.35)'}`,
+              borderRadius: '1.25rem',
+              padding: '3rem 2.5rem',
+              maxWidth: 520,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>
+              {isRejected ? '🚫' : verificationStatus === 'not_applied' ? '📋' : '⏳'}
+            </div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginBottom: '0.75rem' }}>
+              {isRejected
+                ? 'Mentor Application Rejected'
+                : verificationStatus === 'not_applied'
+                ? 'No Mentor Application Found'
+                : 'Account Pending Verification'}
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+              {isRejected
+                ? 'Your mentor application was rejected. You cannot manage sessions until you reapply and are approved by an administrator.'
+                : verificationStatus === 'not_applied'
+                ? 'You need to submit a mentor application and get approved before you can manage sessions.'
+                : 'Your mentor application is under review. Session management will be available once an admin approves your account. Check back soon!'}
+            </p>
+            <button
+              onClick={() => navigate('/mentor/application-status')}
+              style={{
+                padding: '0.7rem 1.8rem',
+                borderRadius: '0.6rem',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                background: isRejected
+                  ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
+                  : 'linear-gradient(135deg,#f59e0b,#d97706)',
+                color: '#fff',
+              }}
+            >
+              {isRejected ? 'View Rejection & Reapply →' : 'View Application Status →'}
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.page}>
       <div style={S.wrap}>

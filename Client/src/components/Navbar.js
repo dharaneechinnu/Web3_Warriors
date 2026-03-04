@@ -6,6 +6,7 @@ import styled from "styled-components"
 import { useAuth } from "../contexts/AuthContext"
 import { useNotifications, getNotifMeta } from "../contexts/NotificationContext"
 import TokenStorage from "../utils/tokenStorage"
+import { getMyApplication } from "../services/mentorApplicationService"
 
 const NavWrapper = styled.div`
   position: fixed;
@@ -68,6 +69,32 @@ const Logo = styled(Link)`
     -webkit-text-fill-color: transparent;
   }
 `
+
+// ── Local state: mentor verification status ──
+// when a mentor is not approved we redirect certain links to application status instead
+const useMentorVerification = () => {
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await getMyApplication();
+        if (!mounted) return;
+        if (!res.success) {
+          setVerificationStatus('not_applied');
+          return;
+        }
+        setVerificationStatus(res.data?.application?.mentorStatus || 'pending');
+      } catch (err) {
+        if (!mounted) return;
+        setVerificationStatus('pending');
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
+  return verificationStatus;
+}
 
 const LogoIcon = styled.div`
   width: 2.5rem;
@@ -531,6 +558,7 @@ const Navbar = () => {
   // ── Router & Auth hooks must come first ─────────────────────────────────
   const { isAuthenticated, user, logout, loading } = useAuth()
   const location = useLocation()
+  const verificationStatus = useMentorVerification();
   const navigate = useNavigate()
 
   // ── UI state ─────────────────────────────────────────────────────────────
@@ -678,7 +706,7 @@ const Navbar = () => {
               <NavLinks>
                 {userRole === 'mentor' ? (
                   <>
-                    <NavLink to="/mentor-home">Home</NavLink>
+                    <NavLink to={verificationStatus === 'approved' ? "/mentor-home" : "/mentor/application-status"}>Home</NavLink>
 
                     {/* Courses dropdown */}
                     <NavDropdown>
@@ -686,9 +714,9 @@ const Navbar = () => {
                         Courses <svg viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
                       </NavDropdownTrigger>
                       <NavDropdownMenu open={openDropdown === 'courses'}>
-                        <NavDropdownItem to="/course-upload" onClick={closeDropdowns}>➕ Upload Course</NavDropdownItem>
-                        <NavDropdownItem to="/mentor/my-courses" onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
-                        <NavDropdownItem to="/mentor/submissions" onClick={closeDropdowns}>📋 Review Submissions</NavDropdownItem>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/course-upload" : "/mentor/application-status"} onClick={closeDropdowns}>➕ Upload Course</NavDropdownItem>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/my-courses" : "/mentor/application-status"} onClick={closeDropdowns}>📚 My Courses</NavDropdownItem>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/submissions" : "/mentor/application-status"} onClick={closeDropdowns}>📋 Review Submissions</NavDropdownItem>
                       </NavDropdownMenu>
                     </NavDropdown>
 
@@ -699,8 +727,8 @@ const Navbar = () => {
                       </NavDropdownTrigger>
                       <NavDropdownMenu open={openDropdown === 'tools'}>
                         <NavDropdownLabel>Manage</NavDropdownLabel>
-                        <NavDropdownItem to="/mentor/sessions" onClick={closeDropdowns}>📅 Manage Sessions</NavDropdownItem>
-                        <NavDropdownItem to="/mentor/challenges" onClick={closeDropdowns}>🏆 My Challenges</NavDropdownItem>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={closeDropdowns}>📅 Manage Sessions</NavDropdownItem>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={closeDropdowns}>🏆 My Challenges</NavDropdownItem>
                         <DropdownDivider />
                         <NavDropdownLabel>Finance</NavDropdownLabel>
                         <NavDropdownItem to="/wallet" onClick={closeDropdowns}>💼 Wallet</NavDropdownItem>
@@ -757,10 +785,10 @@ const Navbar = () => {
                     <DropdownDivider />
                     {userRole === 'mentor' ? (
                       <>
-                        <DropdownItem to="/mentor/profile" onClick={() => setUserMenuOpen(false)}>👤 My Profile</DropdownItem>
-                        <DropdownItem to="/mentor/sessions" onClick={() => setUserMenuOpen(false)}>📅 Sessions</DropdownItem>
-                        <DropdownItem to="/mentor/challenges" onClick={() => setUserMenuOpen(false)}>🏆 Challenges</DropdownItem>
-                        <DropdownItem to="/mentor/submissions" onClick={() => setUserMenuOpen(false)}>📋 Submissions</DropdownItem>
+                        <DropdownItem to={verificationStatus === 'approved' ? "/mentor/profile" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>👤 My Profile</DropdownItem>
+                        <DropdownItem to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>📅 Sessions</DropdownItem>
+                        <DropdownItem to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>🏆 Challenges</DropdownItem>
+                        <DropdownItem to={verificationStatus === 'approved' ? "/mentor/submissions" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>📋 Submissions</DropdownItem>
                       </>
                     ) : (
                       <>
@@ -875,12 +903,12 @@ const Navbar = () => {
               <MobileNavLink to="/mentor-home" onClick={() => setMobileMenuOpen(false)}>🏠 Home</MobileNavLink>
               <MobileNavLink to="/mentor/profile" onClick={() => setMobileMenuOpen(false)}>👤 My Profile</MobileNavLink>
               <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Courses</div>
-              <MobileNavLink to="/course-upload" onClick={() => setMobileMenuOpen(false)}>➕ Upload Course</MobileNavLink>
-              <MobileNavLink to="/mentor/my-courses" onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
-              <MobileNavLink to="/mentor/submissions" onClick={() => setMobileMenuOpen(false)}>📋 Review Submissions</MobileNavLink>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/course-upload" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>➕ Upload Course</MobileNavLink>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/my-courses" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/submissions" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📋 Review Submissions</MobileNavLink>
               <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Tools</div>
-              <MobileNavLink to="/mentor/sessions" onClick={() => setMobileMenuOpen(false)}>📅 Manage Sessions</MobileNavLink>
-              <MobileNavLink to="/mentor/challenges" onClick={() => setMobileMenuOpen(false)}>🏆 My Challenges</MobileNavLink>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📅 Manage Sessions</MobileNavLink>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>🏆 My Challenges</MobileNavLink>
               <MobileNavLink to="/wallet" onClick={() => setMobileMenuOpen(false)}>💼 Wallet</MobileNavLink>
             </>
           ) : isAuthenticated ? (

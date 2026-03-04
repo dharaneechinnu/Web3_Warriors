@@ -66,7 +66,9 @@ const uploadDirs = [
     'uploads/assignments', // Add this for the new assignment uploads
     'uploads/challenges',
     'uploads/images',
-    'uploads/mentors'
+    'uploads/mentors',
+    'uploads/resumes',
+    'uploads/intros',      // Mentor intro videos
 ];
 uploadDirs.forEach(dir => {
     const fullPath = path.join(__dirname, dir);
@@ -84,7 +86,40 @@ app.use("/Auth", require("./Router/AuthRouter"))
 app.use('/Auth/learner', require('./Router/LearnerAuthRouter'))
 app.use('/Auth/mentor', require('./Router/MentorAuthRouter'))
 app.use("/User",require("./Router/userRoutes"))
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded files
+
+// Serve uploaded files with proper MIME types and headers for video streaming
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
+  setHeaders: (res, filePath) => {
+    // Handle video files
+    if (filePath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+    } else if (filePath.endsWith('.webm')) {
+      res.setHeader('Content-Type', 'video/webm');
+      res.setHeader('Accept-Ranges', 'bytes');
+    } else if (filePath.endsWith('.mov')) {
+      res.setHeader('Content-Type', 'video/quicktime');
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+    // Handle PDF files
+    else if (filePath.endsWith('.pdf')) {
+      res.setHeader('Content-Type', 'application/pdf');
+    }
+    // Handle image files
+    else if (filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+      res.setHeader('Content-Type', `image/${filePath.split('.').pop().toLowerCase()}`);
+    }
+    // Add CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  }
+}));
+
+// Serve test pages from public directory
+app.use("/test", express.static(path.join(__dirname, "public")));
+
 app.use("/courses", require("./Router/courseRoutes"));
 // app.use("/courses", require("./Router/CourseProgressRoutes")); // Removed - progress tracking disabled
 app.use("/udemy-courses", require("./Router/UdemyStyleCourseRoutes")); // New Udemy-style courses
@@ -98,6 +133,12 @@ app.use("/notifications", require("./Router/NotificationRoutes"));
 app.use("/availability", require("./Router/AvailabilityRoutes"));
 app.use("/mentorship-requests", require("./Router/MentorshipRequestRoutes"));
 app.use("/slots", require("./Router/SlotRoutes"));
+
+// Mentor application & AI evaluation
+app.use("/mentor-application", require("./Router/mentorApplicationRoutes"));
+
+// Admin panel (mentor approval / rejection)
+app.use("/api/admin", require("./Router/adminRoutes"));
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on PORT: ${PORT} (HTTP + WebSocket)`);

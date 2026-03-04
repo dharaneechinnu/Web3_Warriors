@@ -41,6 +41,17 @@ import MentorSlotManagement from './pages/mentor/MentorSlotManagement';
 import BookSession from './pages/learner/BookSession';
 import VideoRoom from './pages/VideoRoom';
 
+// Mentor application pages
+import MentorApply from './pages/mentor/MentorApply';
+import ApplicationStatus from './pages/mentor/ApplicationStatus';
+
+// Admin panel pages (isolated layout — no main Navbar)
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import MentorApplicationsList from './pages/admin/MentorApplicationsList';
+import MentorApplicationDetail from './pages/admin/MentorApplicationDetail';
+
 // Loading component
 const LoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
@@ -72,11 +83,29 @@ const ProtectedRoute = ({ children }) => {
 const AuthRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
-  // Show loading while checking authentication
   if (loading) {
     return <LoadingScreen />;
   }
 
+  return children;
+};
+
+// Admin-only route guard — redirects non-admins to admin login
+const AdminRoute = ({ children }) => {
+  const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+  }
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/landingpage" replace />;
+  }
 
   return children;
 };
@@ -84,7 +113,8 @@ const AuthRoute = ({ children }) => {
 function AppRoutes() {
   const { isAuthenticated, user, loading } = useAuth();
   const location = useLocation();
-  const isVideoRoom = location.pathname.startsWith('/room/');
+  const isVideoRoom  = location.pathname.startsWith('/room/');
+  const isAdminRoute = location.pathname.startsWith('/admin');
 
   // While auth state is initializing, show loading to avoid route flicker
   if (loading) {
@@ -93,7 +123,8 @@ function AppRoutes() {
 
   return (
     <div className="min-h-screen bg-background-light text-gray-800">
-      {!isVideoRoom && <Navbar />}
+      {/* Hide main Navbar on video rooms and all admin pages */}
+      {!isVideoRoom && !isAdminRoute && <Navbar />}
       <ToastNotifications />
       <Routes>
         {/* Root: show landing page if unauthenticated, else redirect to role home */}
@@ -238,6 +269,40 @@ function AppRoutes() {
         <Route path="/mentor/slots" element={
           <ProtectedRoute><MentorSlotManagement /></ProtectedRoute>
         } />
+
+        {/* ── Mentor Application routes ───────────────────────────── */}
+        <Route path="/mentor/apply" element={
+          <ProtectedRoute><MentorApply /></ProtectedRoute>
+        } />
+        <Route path="/mentor/application-status" element={
+          <ProtectedRoute><ApplicationStatus /></ProtectedRoute>
+        } />
+
+        {/* ── Admin Panel routes (isolated layout, no main Navbar) ── */}
+        {/* Public admin login */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+
+        {/* Protected admin routes — wrapped in AdminLayout (sidebar) */}
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          {/* /admin → redirect to dashboard */}
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+
+          {/* /admin/dashboard */}
+          <Route path="dashboard" element={<AdminDashboard />} />
+
+          {/* /admin/mentors — applications list */}
+          <Route path="mentors" element={<MentorApplicationsList />} />
+
+          {/* /admin/mentors/:id — application detail */}
+          <Route path="mentors/:id" element={<MentorApplicationDetail />} />
+        </Route>
 
         {/* Catch all route - redirect based on auth state */}
         <Route path="*" element={

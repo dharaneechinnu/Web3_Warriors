@@ -1,14 +1,19 @@
 const User = require("../Model/UserModel");
 const CertificationModel = require("../Model/CertificationModel");
 const Challenge = require("../Model/ChallengeModel");
+const MentorApplication = require("../Model/MentorApplication");
 
-// Get all mentors
+// Get all mentors — only those whose application has been approved
 const getMentors = async (req, res) => {
   try {
-    const mentors = await User.find({ role: 'mentor' })
+    // Find all approved applications to get the approved mentor user IDs
+    const approvedApps = await MentorApplication.find({ mentorStatus: 'approved' }).select('userId');
+    const approvedUserIds = approvedApps.map(a => a.userId);
+
+    const mentors = await User.find({ role: 'mentor', _id: { $in: approvedUserIds } })
       .select('name email skills bio experience averageRating ratings profileImage')
       .sort({ averageRating: -1 });
-    console.log(`[getMentors] Found ${mentors.length} mentors`);
+    console.log(`[getMentors] Found ${mentors.length} approved mentors (out of all with mentor role)`);
     res.json({ success: true, mentors });
   } catch (error) {
     console.error('getMentors error:', error);

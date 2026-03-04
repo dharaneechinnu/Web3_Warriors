@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getMyApplication } from '../services/mentorApplicationService';
 import api from '../services/api';
 import styled from 'styled-components';
 import { 
@@ -886,7 +887,21 @@ const CourseUpload = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
+  const [verificationStatus, setVerificationStatus] = useState(null);
+
+  useEffect(() => {
+    getMyApplication().then(res => {
+      if (res.success && res.data) {
+        setVerificationStatus(res.data.application?.mentorStatus || 'pending');
+      } else if (res.notFound) {
+        setVerificationStatus('not_applied');
+      } else {
+        setVerificationStatus('pending');
+      }
+    }).catch(() => setVerificationStatus('pending'));
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -2716,6 +2731,66 @@ const CourseUpload = () => {
       )}
     </div>
   );
+
+  // Block unverified mentors from accessing the upload wizard
+  if (verificationStatus !== null && verificationStatus !== 'approved') {
+    const isRejected = verificationStatus === 'rejected';
+    return (
+      <div className="min-h-screen bg-slate-900 text-white" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          style={{
+            background: isRejected ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+            border: `1px solid ${isRejected ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.35)'}`,
+            borderRadius: '1.25rem',
+            padding: '3rem 2.5rem',
+            maxWidth: 520,
+            width: '90%',
+            textAlign: 'center',
+            color: '#fff',
+          }}
+        >
+          <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>
+            {isRejected ? '🚫' : verificationStatus === 'not_applied' ? '📋' : '⏳'}
+          </div>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.75rem' }}>
+            {isRejected ? 'Course Upload Unavailable' : verificationStatus === 'not_applied' ? 'Application Required' : 'Verification Pending'}
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+            {isRejected
+              ? 'Your mentor application was rejected. You cannot upload courses until you reapply and are approved by an admin.'
+              : verificationStatus === 'not_applied'
+              ? 'You need to submit a mentor application and receive admin approval before uploading courses.'
+              : 'Your mentor application is under review. Course upload will be unlocked once an admin approves your account.'}
+          </p>
+          <button
+            onClick={() => navigate('/mentor/application-status')}
+            style={{
+              padding: '0.7rem 1.8rem', borderRadius: '0.6rem', border: 'none',
+              cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
+              background: isRejected ? 'linear-gradient(135deg,#ef4444,#b91c1c)' : 'linear-gradient(135deg,#f59e0b,#d97706)',
+              color: '#fff', marginRight: '0.75rem',
+            }}
+          >
+            {isRejected ? 'View Rejection & Reapply →' : 'View Application Status →'}
+          </button>
+          <button
+            onClick={() => navigate('/mentor-home')}
+            style={{
+              padding: '0.7rem 1.4rem', borderRadius: '0.6rem',
+              border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+              fontWeight: 600, fontSize: '0.875rem',
+              background: 'transparent', color: '#94a3b8', marginTop: '0.5rem',
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">

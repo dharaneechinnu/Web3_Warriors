@@ -72,10 +72,13 @@ const upload = multer({
   }
 });
 
+const auth = require('../MiddleWare/AuthMiddleWare');
+const ensureMentorApproved = require('../MiddleWare/ensureMentorApproved');
+
 // MENTOR ROUTES - Course Creation and Management
 
 // Upload lecture video (individual upload)
-router.post('/upload-lecture-video', upload.single('lecture_video'), async (req, res) => {
+router.post('/upload-lecture-video', auth, ensureMentorApproved, upload.single('lecture_video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ 
@@ -107,7 +110,7 @@ router.post('/upload-lecture-video', upload.single('lecture_video'), async (req,
 });
 
 // Create new course with file uploads (Udemy-style)
-router.post('/create', upload.fields([
+router.post('/create', auth, ensureMentorApproved, upload.fields([
   { name: 'thumbnail', maxCount: 1 },
   { name: 'promo_video', maxCount: 1 }
 ]), async (req, res) => {
@@ -217,7 +220,7 @@ router.delete('/section/:sectionId', async (req, res) => {
 });
 
 // Add lecture to section
-router.post('/lecture', async (req, res) => {
+router.post('/lecture', auth, ensureMentorApproved, async (req, res) => {
   try {
     const lectureData = req.body;
     const lecture = new Lecture(lectureData);
@@ -233,7 +236,7 @@ router.post('/lecture', async (req, res) => {
 });
 
 // Update lecture
-router.put('/lecture/:lectureId', async (req, res) => {
+router.put('/lecture/:lectureId', auth, ensureMentorApproved, async (req, res) => {
   try {
     const lecture = await CourseLecture.findByIdAndUpdate(
       req.params.lectureId,
@@ -307,7 +310,7 @@ router.get('/lecture/:lectureId', async (req, res) => {
 });
 
 // Upload video for lecture
-router.post('/upload/video/:lectureId', upload.single('video'), async (req, res) => {
+router.post('/upload/video/:lectureId', auth, ensureMentorApproved, upload.single('video'), async (req, res) => {
   try {
     const videoUrl = `/uploads/videos/${req.file.filename}`;
     const { duration, description } = req.body;
@@ -329,7 +332,7 @@ router.post('/upload/video/:lectureId', upload.single('video'), async (req, res)
 });
 
 // Upload resource for lecture
-router.post('/upload/resource/:lectureId', upload.single('resource'), async (req, res) => {
+router.post('/upload/resource/:lectureId', auth, ensureMentorApproved, upload.single('resource'), async (req, res) => {
   try {
     const resourceUrl = `/uploads/resources/${req.file.filename}`;
     const { resourceType } = req.body;

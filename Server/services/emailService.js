@@ -130,3 +130,78 @@ exports.sendBookingRejectedEmail = async ({ learnerEmail, learnerName, mentorNam
         return false;
     }
 };
+
+// ── Send mentor rejection email (when admin rejects application) ───────────
+exports.sendMentorRejectionEmail = async ({ mentorEmail, mentorName, reason }) => {
+    try {
+        const html = wrap(`
+            <h2 style="color:#ef4444;margin:0 0 1rem;">Application Update — Thank You for Applying</h2>
+            <p>Hello <strong style="color:#fff;">${mentorName}</strong>,</p>
+            <p>Thank you for your interest in becoming a mentor on the Skill Exchange platform and for taking the time to submit your application.</p>
+            <p>After careful review, we have decided not to move forward with your application at this time.</p>
+            ${reason ? `<p style="color:#94a3b8;font-style:italic;">Reason provided by reviewer: ${reason}</p>` : ''}
+            <p>We appreciate the effort you put into your submission. If you would like to improve your application and reapply in the future, consider:</p>
+            <ul style="color:#e2e8f0;">
+                <li>Providing more details on recent projects and outcomes</li>
+                <li>Highlighting specific mentoring or teaching experience</li>
+                <li>Uploading a concise intro video demonstrating your communication style</li>
+            </ul>
+            <p>If you have questions or would like feedback, please reply to this email and our team will assist where possible.</p>
+            <p style="margin-top:1rem;">Warm regards,<br/>The Skill Exchange Team</p>
+            <div style="text-align:center;margin:1.5rem 0;">
+                <a href="${CLIENT_URL}/" style="display:inline-block;padding:0.5rem 1.25rem;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;text-decoration:none;border-radius:0.5rem;font-weight:700;">Visit Skill Exchange</a>
+            </div>
+        `);
+
+        await transporter.sendMail({
+            from: SENDER_EMAIL,
+            to: mentorEmail,
+            subject: `Update on your mentor application`,
+            html,
+        });
+
+        console.log(`[Email] Mentor rejection sent to ${mentorEmail}`);
+        return true;
+    } catch (err) {
+        console.error('[Email] Failed to send mentor rejection email:', err.message);
+        return false;
+    }
+};
+
+// ── Send mentor approval email (when admin approves application) ───────────
+exports.sendMentorApprovalEmail = async ({ mentorEmail, mentorName }) => {
+    try {
+        const html = wrap(`
+            <h2 style="color:#22c55e;margin:0 0 1rem;">Congratulations — Mentor Application Approved</h2>
+            <p>Hello <strong style="color:#fff;">${mentorName}</strong>,</p>
+            <p>We're excited to let you know that your application to join Skill Exchange as a mentor has been approved.</p>
+            <p>You now have access to mentor features including creating courses, accepting sessions, and managing learners.</p>
+            <div style="background:rgba(6,182,212,0.04);border-radius:0.5rem;padding:1rem;margin:1rem 0;color:#e2e8f0;">
+                <p style="margin:0;">Next steps:</p>
+                <ul style="margin:0.5rem 0 0;color:#e2e8f0;">
+                    <li>Log in to your mentor dashboard and complete your profile.</li>
+                    <li>Set up your availability and create your first session.</li>
+                    <li>Upload any course materials or an intro video to help learners find you.</li>
+                </ul>
+            </div>
+            <p>If you have any questions, reply to this email and our team will assist.</p>
+            <p style="margin-top:1rem;">Warm regards,<br/>The Skill Exchange Team</p>
+            <div style="text-align:center;margin:1.5rem 0;">
+                <a href="${CLIENT_URL}/mentor/dashboard" style="display:inline-block;padding:0.5rem 1.25rem;background:linear-gradient(135deg,#059669,#10b981);color:#fff;text-decoration:none;border-radius:0.5rem;font-weight:700;">Open Mentor Dashboard</a>
+            </div>
+        `);
+
+        await transporter.sendMail({
+            from: SENDER_EMAIL,
+            to: mentorEmail,
+            subject: `Your mentor application has been approved`,
+            html,
+        });
+
+        console.log(`[Email] Mentor approval sent to ${mentorEmail}`);
+        return true;
+    } catch (err) {
+        console.error('[Email] Failed to send mentor approval email:', err.message);
+        return false;
+    }
+};

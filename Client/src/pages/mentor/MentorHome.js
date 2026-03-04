@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { motion } from "framer-motion";
 import api from "../../services/api";
 import UdemyStyleQuickActions from "../../components/UdemyStyleQuickActions";
+import { getMyApplication } from "../../services/mentorApplicationService";
 
 // ============= STYLED COMPONENTS =============
 
@@ -348,11 +349,58 @@ const EmptyState = styled.div`
   font-size: 1rem;
 `;
 
+/* Verification banner */
+const VerificationBanner = styled(motion.div)`
+  border-radius: 1rem;
+  padding: 1.25rem 1.75rem;
+  margin-bottom: 1.75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: ${({ status }) =>
+    status === 'rejected'
+      ? 'rgba(239,68,68,0.12)'
+      : 'rgba(245,158,11,0.10)'};
+  border: 1px solid ${
+    ({ status }) => status === 'rejected' ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.4)'
+  };
+  .icon { font-size: 1.5rem; flex-shrink: 0; }
+  .content { flex: 1; }
+  .title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: ${({ status }) => status === 'rejected' ? '#fca5a5' : '#fde68a'};
+    margin-bottom: 0.3rem;
+  }
+  .desc {
+    font-size: 0.88rem;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 0.75rem;
+  }
+  .link {
+    display: inline-block;
+    padding: 0.4rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: ${({ status }) =>
+      status === 'rejected'
+        ? 'rgba(239,68,68,0.25)'
+        : 'rgba(245,158,11,0.25)'};
+    color: ${({ status }) => status === 'rejected' ? '#fca5a5' : '#fde68a'};
+    transition: opacity 0.2s;
+    &:hover { opacity: 0.8; }
+  }
+`;
+
 // ============= MAIN COMPONENT =============
 
 const MentorHome = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState(null); // null|'pending'|'approved'|'rejected'|'not_applied'
   const [mentorData, setMentorData] = useState({
     name: "Mentor",
     stats: {
@@ -373,6 +421,16 @@ const MentorHome = () => {
 
   useEffect(() => {
     fetchMentorData();
+    // separately fetch verification status so it doesn't block the rest of the dashboard
+    getMyApplication().then(res => {
+      if (res.success) {
+        setVerificationStatus(res.data?.application?.mentorStatus || 'pending');
+      } else if (res.notFound) {
+        setVerificationStatus('not_applied');
+      } else {
+        setVerificationStatus('pending'); // assume pending if error
+      }
+    });
   }, []);
 
   const fetchMentorData = async () => {
@@ -536,6 +594,43 @@ const MentorHome = () => {
   return (
     <PageContainer>
       <Container>
+
+        {/* ── Verification Banner (shown when not yet approved) ── */}
+        {verificationStatus && verificationStatus !== 'approved' && (
+          <VerificationBanner
+            status={verificationStatus}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <span className="icon">
+              {verificationStatus === 'rejected' ? '❌' : '⏳'}
+            </span>
+            <div className="content">
+              <div className="title">
+                {verificationStatus === 'rejected'
+                  ? 'Your mentor application was rejected'
+                  : verificationStatus === 'not_applied'
+                  ? 'No mentor application found'
+                  : 'Your mentor account is pending verification'}
+              </div>
+              <div className="desc">
+                {verificationStatus === 'rejected'
+                  ? 'You cannot upload courses or receive session bookings until you reapply and get approved by an admin.'
+                  : verificationStatus === 'not_applied'
+                  ? 'Please submit a mentor application. Uploading courses and receiving sessions requires admin approval.'
+                  : 'Course uploading and session bookings are locked until an admin approves your application. You will be notified by email.'}
+              </div>
+              <button
+                className="link"
+                onClick={() => navigate('/mentor/application-status')}
+              >
+                {verificationStatus === 'rejected' ? 'View & Reapply →' : 'View Application Status →'}
+              </button>
+            </div>
+          </VerificationBanner>
+        )}
+
         {/* Header / Welcome Section */}
         <HeaderSection
           initial={{ opacity: 0, y: 20 }}
@@ -548,22 +643,33 @@ const MentorHome = () => {
               <RoleBadge>🎯 Role: Mentor</RoleBadge>
               <Subtitle>Teach → Validate → Build Trust</Subtitle>
             </div>
-            <motion.button
-              onClick={() => navigate('/course-upload')}
-              className="px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-fuchsia-500/25 flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-              </svg>
-              Upload Course
-            </motion.button>
+            {verificationStatus === 'approved' ? (
+              <motion.button
+                onClick={() => navigate('/course-upload')}
+                className="px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-fuchsia-500/25 flex items-center gap-2"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+                </svg>
+                Upload Course
+              </motion.button>
+            ) : (
+              <motion.button
+                onClick={() => navigate('/mentor/application-status')}
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                className="px-6 py-3 bg-gray-700 text-gray-300 font-semibold rounded-lg flex items-center gap-2 border border-gray-600"
+                title="Get verified first to upload courses"
+              >
+                🔒 Upload Course (Verification Required)
+              </motion.button>
+            )}
           </div>
         </HeaderSection>
 
         {/* Udemy-style Course Management Quick Actions */}
-        <UdemyStyleQuickActions />
+        <UdemyStyleQuickActions verificationStatus={verificationStatus} />
 
         {/* Mentor Summary (Dashboard Stats) */}
         <StatsGrid>
@@ -731,6 +837,26 @@ const MentorHome = () => {
           <SectionTitle>⚡ Mentor Tools</SectionTitle>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
             <button
+             onClick={() => verificationStatus === 'approved' ? navigate('/mentor/sessions') : navigate('/mentor/application-status')}
+              style={{
+                background: verificationStatus === 'approved'
+                  ? 'linear-gradient(135deg, #f97316, #ef4444)'
+                  : 'rgba(100,116,139,0.2)',
+                color: verificationStatus === 'approved' ? 'white' : '#64748b',
+                border: verificationStatus === 'approved' ? 'none' : '1px solid rgba(100,116,139,0.3)',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+               title={verificationStatus !== 'approved' ? 'Get verified first to manage sessions' : ''}
+            
+            >
+              🕐 Manage Time Slots
+            </button>
+            <button
               onClick={() => navigate('/mentor/slots')}
               style={{
                 background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
@@ -740,27 +866,31 @@ const MentorHome = () => {
                 padding: '1rem 2rem',
                 fontSize: '0.95rem',
                 fontWeight: '600',
-                cursor: 'pointer',
+                cursor: verificationStatus === 'approved' ? 'pointer' : 'not-allowed',
                 flex: '1 1 200px',
               }}
             >
               🕐 Manage Time Slots
             </button>
             <button
-              onClick={() => navigate('/mentor/sessions')}
+              onClick={() => verificationStatus === 'approved' ? navigate('/mentor/sessions') : navigate('/mentor/application-status')}
               style={{
-                background: 'linear-gradient(135deg, #f97316, #ef4444)',
-                color: 'white',
-                border: 'none',
+                background: verificationStatus === 'approved'
+                  ? 'linear-gradient(135deg, #f97316, #ef4444)'
+                  : 'rgba(100,116,139,0.2)',
+                color: verificationStatus === 'approved' ? 'white' : '#64748b',
+                border: verificationStatus === 'approved' ? 'none' : '1px solid rgba(100,116,139,0.3)',
                 borderRadius: '0.75rem',
                 padding: '1rem 2rem',
                 fontSize: '0.95rem',
                 fontWeight: '600',
-                cursor: 'pointer',
+                cursor: verificationStatus === 'approved' ? 'pointer' : 'not-allowed',
                 flex: '1 1 200px',
               }}
+              title={verificationStatus !== 'approved' ? 'Get verified first to manage sessions' : ''}
             >
               📅 Manage Sessions
+              {verificationStatus !== 'approved' && ' 🔒'}
             </button>
             <button
               onClick={() => navigate('/mentor/challenges')}

@@ -85,19 +85,25 @@ const ActionButton = styled.div`
   font-size: 0.875rem;
 `;
 
-const UdemyStyleQuickActions = () => {
+const UdemyStyleQuickActions = ({ verificationStatus }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const isApproved = verificationStatus === 'approved';
+
   const mentorActions = [
     {
-      icon: <FaPlus />,
-      title: 'Upload New Course',
-      description: 'Create a professional course with our Udemy-style upload wizard. Add videos, thumbnails, and complete details.',
-      action: () => navigate('/course-upload'),
-      buttonText: 'Start Upload'
+      icon: isApproved ? <FaPlus /> : '🔒',
+      title: isApproved ? 'Upload New Course' : 'Upload New Course (Locked)',
+      description: isApproved
+        ? 'Create a professional course with our Udemy-style upload wizard. Add videos, thumbnails, and complete details.'
+        : verificationStatus === 'rejected'
+        ? 'Your mentor application was rejected. Reapply and get approved to unlock course uploads.'
+        : 'You must be a verified mentor to create courses. Submit your application and wait for admin approval.',
+      action: isApproved ? () => navigate('/course-upload') : () => navigate('/mentor/application-status'),
+      buttonText: isApproved ? 'Start Upload' : 'View Application Status',
+      locked: !isApproved,
     },
- 
   ];
 
   const learnerActions = [
@@ -135,13 +141,14 @@ const UdemyStyleQuickActions = () => {
             transition={{ duration: 0.3, delay: index * 0.1 }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            style={action.locked ? { opacity: 0.6, borderColor: 'rgba(239,68,68,0.3)' } : {}}
           >
-            <ActionIcon>
+            <ActionIcon style={action.locked ? { background: 'linear-gradient(135deg,#7f1d1d,#991b1b)' } : {}}>
               {action.icon}
             </ActionIcon>
             <ActionTitle>{action.title}</ActionTitle>
             <ActionDescription>{action.description}</ActionDescription>
-            <ActionButton>
+            <ActionButton style={action.locked ? { color: '#f87171' } : {}}>
               {action.buttonText}
               <FaArrowRight />
             </ActionButton>

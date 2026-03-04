@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import {
   FaArrowRight 
 } from 'react-icons/fa';
 import api from '../../services/api';
+import { getMyApplication } from '../../services/mentorApplicationService';
 
 const CreateContainer = styled.div`
   min-height: 100vh;
@@ -312,6 +313,20 @@ const CourseCreationForm = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState(null);
+
+  // Guard: check mentor verification before allowing course creation
+  useEffect(() => {
+    getMyApplication().then(res => {
+      if (res.success) {
+        setVerificationStatus(res.data?.application?.mentorStatus || 'pending');
+      } else if (res.notFound) {
+        setVerificationStatus('not_applied');
+      } else {
+        setVerificationStatus('pending');
+      }
+    });
+  }, []);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -405,6 +420,66 @@ const CourseCreationForm = () => {
       setIsLoading(false);
     }
   };
+
+  // Block the form until verification is confirmed
+  if (verificationStatus !== null && verificationStatus !== 'approved') {
+    const isRejected = verificationStatus === 'rejected';
+    return (
+      <CreateContainer>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            style={{
+              background: isRejected ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+              border: `1px solid ${isRejected ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.35)'}`,
+              borderRadius: '1.25rem',
+              padding: '3rem 2.5rem',
+              maxWidth: 520,
+              textAlign: 'center',
+              color: '#fff',
+            }}
+          >
+            <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>
+              {isRejected ? '🚫' : verificationStatus === 'not_applied' ? '📋' : '⏳'}
+            </div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.75rem' }}>
+              {isRejected
+                ? 'Course Upload Unavailable'
+                : verificationStatus === 'not_applied'
+                ? 'Application Required'
+                : 'Account Pending Verification'}
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+              {isRejected
+                ? 'Your mentor application was rejected. You cannot upload courses until you reapply and are approved.'
+                : verificationStatus === 'not_applied'
+                ? 'You must submit a mentor application and get admin approval before you can create courses.'
+                : 'Your mentor application is being reviewed. Course creation will be unlocked once an admin approves your account.'}
+            </p>
+            <button
+              onClick={() => navigate('/mentor/application-status')}
+              style={{
+                padding: '0.7rem 1.8rem',
+                borderRadius: '0.6rem',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                background: isRejected
+                  ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
+                  : 'linear-gradient(135deg,#f59e0b,#d97706)',
+                color: '#fff',
+              }}
+            >
+              {isRejected ? 'View Rejection & Reapply →' : 'View Application Status →'}
+            </button>
+          </motion.div>
+        </div>
+      </CreateContainer>
+    );
+  }
 
   return (
     <CreateContainer>
