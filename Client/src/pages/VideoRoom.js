@@ -94,9 +94,11 @@ export default function VideoRoom() {
   const screenStream   = useRef(null);     // screen capture stream
   const screenSender   = useRef(null);     // RTCRtpSender for screen track
   const remoteStreamRef = useRef(null);    // single MediaStream for all remote tracks
-  const chatEndRef     = useRef(null);
-  const offerSent      = useRef(false);
-  const remoteSockId   = useRef(null);
+  const chatEndRef        = useRef(null);
+  const offerSent         = useRef(false);
+  const remoteSockId      = useRef(null);
+  const iceCandidateQueue = useRef([]);   // queue ICE candidates until remoteDesc is set
+  const remoteDescSet     = useRef(false);
 
   /* state */
   const [joined, setJoined]               = useState(false);       // lobby → in-call
@@ -146,6 +148,10 @@ export default function VideoRoom() {
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
+
+    // Reset ICE queue for the new connection
+    iceCandidateQueue.current = [];
+    remoteDescSet.current = false;
 
     // Prepare a single MediaStream to collect all remote tracks
     remoteStreamRef.current = new MediaStream();
@@ -268,12 +274,32 @@ export default function VideoRoom() {
       }
     });
 
-    /* 4. New peer arrived → wait for offer */
-    socket.on("user-connected", ({ socketId, userName: n }) => {
+    /* 4. New peer arrived — use socket ID comparison to break tie if both
+       arrive simultaneously and both got room-users:[]. The peer with the
+       lexicographically larger socket ID becomes the offerer. */
+    socket.on("user-connected", async ({ socketId, userName: n }) => {
       remoteSockId.current = socketId;
       setPeerName(n);
       setStatus(`${n} joined. Connecting\u2026`);
-      createPC(socketId);
+
+      // If we already sent an offer via room-users, do nothing extra
+      if (offerSent.current) { createPC(socketId); return; }
+
+      // Race condition fix: higher socket ID initiates the offer
+      if (socket.id > socketId) {
+        offerSent.current = true;
+        try {
+          const pc = createPC(socketId);
+          if (pc.signalingState === "closed") return;
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("offer", { roomId, offer, to: socketId });
+        } catch (err) {
+          console.warn("[user-connected] offer failed:", err.message);
+        }
+      } else {
+        createPC(socketId);
+      }
     });
 
     /* 5. Receive offer → answer */
@@ -284,6 +310,12 @@ export default function VideoRoom() {
         const pc = createPC(from);
         if (pc.signalingState === "closed") return;
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        // Mark remote desc as set and flush any queued ICE candidates
+        remoteDescSet.current = true;
+        for (const c of iceCandidateQueue.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        iceCandidateQueue.current = [];
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("answer", { roomId, answer, to: from });
@@ -297,15 +329,30 @@ export default function VideoRoom() {
       const pc = pcRef.current;
       if (pc && pc.signalingState !== "stable") {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        // Mark remote desc as set and flush any queued ICE candidates
+        remoteDescSet.current = true;
+        for (const c of iceCandidateQueue.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        iceCandidateQueue.current = [];
       }
     });
 
-    /* 7. ICE candidates */
+    /* 7. ICE candidates — queue them if remote description not yet set */
     socket.on("ice-candidate", async ({ candidate }) => {
+      if (!candidate) return;
+      const pc = pcRef.current;
+      if (!pc || pc.signalingState === "closed") return;
+      if (!remoteDescSet.current) {
+        // Remote desc not ready yet — buffer the candidate
+        iceCandidateQueue.current.push(candidate);
+        return;
+      }
       try {
-        const pc = pcRef.current;
-        if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (_) {}
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn("[ICE] addIceCandidate failed:", err.message);
+      }
     });
 
     /* 8. Peer disconnected */
