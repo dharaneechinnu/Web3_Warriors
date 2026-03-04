@@ -150,6 +150,7 @@ function ResetPassword() {
         <Form onSubmit={handleSubmit}>
           <Input
             type="password"
+            showToggle
             name="newPassword"
             value={formData.newPassword}
             onChange={handleInputChange}
@@ -159,6 +160,7 @@ function ResetPassword() {
 
           <Input
             type="password"
+            showToggle
             name="confirmPassword"
             value={formData.confirmPassword}
             onChange={handleInputChange}

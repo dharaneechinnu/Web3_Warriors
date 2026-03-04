@@ -56,7 +56,7 @@ function RegisterLearner(){
             <Input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
           </Row>
           <Row>
-            <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
+            <Input type="password" showToggle name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
             <Input type="tel" name="mobileNo" placeholder="Mobile Number" value={formData.mobileNo} onChange={handleChange} required />
           </Row>
           <Row>
