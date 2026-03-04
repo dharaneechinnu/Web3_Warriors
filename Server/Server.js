@@ -108,7 +108,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: "600mb" }));
+app.use(express.urlencoded({ limit: "600mb", extended: true }));
 
 // Explicit CORS header middleware (robust handling for preflight in production)
 app.use((req, res, next) => {
@@ -166,36 +167,51 @@ app.use('/Auth/learner', require('./Router/LearnerAuthRouter'))
 app.use('/Auth/mentor', require('./Router/MentorAuthRouter'))
 app.use("/User",require("./Router/userRoutes"))
 
-// Serve uploaded files with proper MIME types and headers for video streaming
-app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
-  setHeaders: (res, filePath) => {
-    // Handle video files
-    if (filePath.endsWith('.mp4')) {
-      res.setHeader('Content-Type', 'video/mp4');
-      res.setHeader('Accept-Ranges', 'bytes');
-    } else if (filePath.endsWith('.webm')) {
-      res.setHeader('Content-Type', 'video/webm');
-      res.setHeader('Accept-Ranges', 'bytes');
-    } else if (filePath.endsWith('.mov')) {
-      res.setHeader('Content-Type', 'video/quicktime');
-      res.setHeader('Accept-Ranges', 'bytes');
-    }
-    // Handle PDF files
-    else if (filePath.endsWith('.pdf')) {
-      res.setHeader('Content-Type', 'application/pdf');
-    }
-    // Handle image files
-    else if (filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-      res.setHeader('Content-Type', `image/${filePath.split('.').pop().toLowerCase()}`);
-    }
-    // Add CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Range');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-  }
-}));
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res, filePath) => {
 
+      // Enable video streaming
+      res.setHeader("Accept-Ranges", "bytes");
+
+      // Video types
+      if (filePath.endsWith(".mp4")) {
+        res.setHeader("Content-Type", "video/mp4");
+      }
+      else if (filePath.endsWith(".webm")) {
+        res.setHeader("Content-Type", "video/webm");
+      }
+      else if (filePath.endsWith(".mov")) {
+        res.setHeader("Content-Type", "video/quicktime");
+      }
+
+      // PDF
+      else if (filePath.endsWith(".pdf")) {
+        res.setHeader("Content-Type", "application/pdf");
+      }
+
+      // Images
+      else if (filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        const ext = path.extname(filePath).toLowerCase();
+        res.setHeader("Content-Type", `image/${ext.replace(".", "")}`);
+      }
+
+      /*
+      ----------------------------------------
+      CORS HEADERS FOR VIDEO STREAMING
+      ----------------------------------------
+      */
+      res.setHeader("Access-Control-Allow-Origin", "https://ardk.online");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Range");
+      res.setHeader(
+        "Access-Control-Expose-Headers",
+        "Content-Length, Content-Range, Accept-Ranges"
+      );
+    }
+  })
+);
 // Serve test pages from public directory
 app.use("/test", express.static(path.join(__dirname, "public")));
 
