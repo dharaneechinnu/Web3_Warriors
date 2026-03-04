@@ -11,8 +11,24 @@ const fs = require('fs');
 
 // ── HTTP server & Socket.IO ───────────────────────────────────────────────────
 const httpServer = http.createServer(app);
+
+// Socket.IO with same CORS whitelist
+const allowedSocketOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://187.124.96.177:3000',
+    'https://ardk.online',
+    'https://www.ardk.online',
+    CLIENT_URL.replace(/\/$/, ''),
+];
+
 const io = new SocketIOServer(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+    cors: { 
+        origin: allowedSocketOrigins,
+        methods: ['GET', 'POST'],
+        credentials: true
+    }
 });
 require('./sockets/signaling')(io);
 
@@ -47,7 +63,51 @@ io.on('connection', (socket) => {
     });
 });
 
-app.use(cors());
+// ── CORS Configuration with Whitelist ─────────────────────────────────────────
+const allowedOrigins = [
+    'http://localhost:3000',           // Development frontend
+    'http://localhost:3001',           // Alternative dev port
+    'http://127.0.0.1:3000',           // Localhost alternative
+    'http://187.124.96.177:3000',      // Dev machine IP
+    'https://ardk.online',             // Production frontend
+    'https://www.ardk.online',         // Production frontend with www
+    CLIENT_URL.replace(/\/$/, ''),     // CLIENT_URL from .env (normalized)
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+        
+        // Check if origin is in whitelist
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
+            callback(new Error(`CORS policy: Origin ${origin} is not allowed`));
+        }
+    },
+    credentials: true, // Allow cookies and authorization headers
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin',
+        'Range', // For video streaming
+    ],
+    exposedHeaders: [
+        'Content-Length',
+        'Content-Range',
+        'Accept-Ranges',
+        'X-Total-Count',
+    ],
+    optionsSuccessStatus: 200, // Some legacy browsers choke on 204
+    maxAge: 86400, // Cache preflight response for 24 hours
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 mongoose.connect(process.env.MONGODB)
