@@ -182,6 +182,7 @@ function LoginMentor() {
           
           <Input
             type="password"
+            showToggle
             name="password"
             placeholder="Enter your password"
             value={formData.password}

@@ -54,7 +54,7 @@ function LoginMentor(){
 
         <LoginForm onSubmit={handleSubmit}>
           <Input label="Email" type="email" name="email" value={formData.email} onChange={handleInputChange} required />
-          <Input label="Password" type="password" name="password" value={formData.password} onChange={handleInputChange} required />
+          <Input label="Password" type="password" showToggle name="password" value={formData.password} onChange={handleInputChange} required />
           <Button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</Button>
         </LoginForm>
 

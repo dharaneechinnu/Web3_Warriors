@@ -179,6 +179,7 @@ function Login() {
           <Input
             label="Password"
             type="password"
+            showToggle
             name="password"
             value={formData.password}
             onChange={handleInputChange}
