@@ -20,6 +20,10 @@ require('./sockets/signaling')(io);
 const sessionController = require('./Controller/SessionController');
 sessionController.setIO(io);
 
+// Pass io to MentorshipController for real-time notifications
+const mentorshipController = require('./Controller/MentorshipController');
+mentorshipController.setIO(io);
+
 // Pass io to ChallengeController for real-time notifications
 const challengeController = require('./Controller/ChallengeController');
 challengeController.setIO(io);
@@ -35,7 +39,11 @@ checkConnection();
 // Socket.IO: let authenticated users join their personal notification room
 io.on('connection', (socket) => {
     socket.on('join-notifications', (userId) => {
-        if (userId) socket.join(`user_${userId}`);
+        if (userId) {
+            socket.join(`user_${userId}`);
+            socket.join(`mentor_${userId}`);
+            socket.join(`learner_${userId}`);
+        }
     });
 });
 
@@ -87,6 +95,9 @@ app.use("/wallet", require("./Router/walletRoutes"));
 app.use("/challenges", require("./Router/ChallengeRoutes"));
 app.use("/sessions", require("./Router/SessionRoutes"));
 app.use("/notifications", require("./Router/NotificationRoutes"));
+app.use("/availability", require("./Router/AvailabilityRoutes"));
+app.use("/mentorship-requests", require("./Router/MentorshipRequestRoutes"));
+app.use("/slots", require("./Router/SlotRoutes"));
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on PORT: ${PORT} (HTTP + WebSocket)`);
