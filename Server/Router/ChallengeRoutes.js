@@ -17,8 +17,9 @@ const storage = multer.diskStorage({
         cb(null, unique + path.extname(file.originalname));
     }
 });
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
-
+const upload = multer({
+  limits: { fileSize: 600 * 1024 * 1024 }
+});
 // ─── MENTOR ───────────────────────────────────────────────────────────────────
 router.post('/create', ctrl.createChallenge);
 router.get('/mentor/:mentorId', ctrl.getMentorChallenges);
