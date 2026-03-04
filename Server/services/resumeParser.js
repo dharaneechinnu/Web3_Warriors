@@ -1,13 +1,21 @@
 const fs       = require('fs');
 const path     = require('path');
-const pdfParse = require('pdf-parse');
-
 /**
  * Parse a PDF resume from a local disk path and return extracted text.
+ * This function lazily requires `pdf-parse` to avoid startup crashes
+ * in environments where DOM APIs are not available.
  * @param {string} localPath - Path relative to process.cwd() (e.g. "uploads/resumes/resume_xxx.pdf")
  * @returns {Promise<string>} Extracted plain text, or empty string on failure.
  */
 const parseResumeFromPath = async (localPath) => {
+  let pdfParse;
+  try {
+    pdfParse = require('pdf-parse');
+  } catch (rqErr) {
+    console.warn('[resumeParser] pdf-parse not available or failed to load:', rqErr.message);
+    return '';
+  }
+
   try {
     const absolutePath = path.isAbsolute(localPath)
       ? localPath
@@ -17,7 +25,7 @@ const parseResumeFromPath = async (localPath) => {
     const data   = await pdfParse(buffer);
     return (data.text || '').trim();
   } catch (err) {
-    console.error('[resumeParser] Parse error (local path):', err.message);
+    console.error('[resumeParser] Parse error (local path):', err && err.message ? err.message : err);
     return '';
   }
 };
@@ -29,6 +37,14 @@ const parseResumeFromPath = async (localPath) => {
  * @returns {Promise<string>} Extracted plain text, or empty string on failure.
  */
 const parseResumeFromUrl = async (url) => {
+  let pdfParse;
+  try {
+    pdfParse = require('pdf-parse');
+  } catch (rqErr) {
+    console.warn('[resumeParser] pdf-parse not available or failed to load:', rqErr.message);
+    return '';
+  }
+
   try {
     const axios    = require('axios');
     const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
@@ -36,7 +52,7 @@ const parseResumeFromUrl = async (url) => {
     const data     = await pdfParse(buffer);
     return (data.text || '').trim();
   } catch (err) {
-    console.error('[resumeParser] Parse error (URL):', err.message);
+    console.error('[resumeParser] Parse error (URL):', err && err.message ? err.message : err);
     return '';
   }
 };

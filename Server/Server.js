@@ -110,6 +110,25 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Explicit CORS header middleware (robust handling for preflight in production)
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (!origin) return next(); // allow tools/servers with no origin header
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Range');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, X-Total-Count');
+        if (req.method === 'OPTIONS') return res.sendStatus(200);
+    } else {
+        console.warn(`⚠️  CORS middleware: blocked origin ${origin}`);
+    }
+
+    return next();
+});
+
 mongoose.connect(process.env.MONGODB)
    .then(()=>{console.log("DataBase Connect Successfully...")})
   .catch(err=>{
