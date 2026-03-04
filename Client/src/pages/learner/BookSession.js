@@ -88,8 +88,9 @@ export default function BookSession() {
   // modal form
   const [topic, setTopic]         = useState("");
   const [message, setMessage]     = useState("");
-  const [duration, setDuration]   = useState(60);
-  const [schedTime, setSchedTime] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -133,29 +134,48 @@ export default function BookSession() {
     finally { setLoading(false); }
   };
 
+  /* -- fetch available slots for mentor -- */
+  const fetchAvailableSlots = async (mentorId) => {
+    setSlotsLoading(true);
+    try {
+      const res = await api.get(`/slots/mentor/${mentorId}/available`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const slots = res.data.slots || [];
+      setAvailableSlots(slots.sort((a, b) => new Date(a.startTimeRaw) - new Date(b.startTimeRaw)));
+    } catch (err) {
+      console.error("[BookSession] fetch slots error:", err);
+      setAvailableSlots([]);
+    } finally {
+      setSlotsLoading(false);
+    }
+  };
+
   /* -- book mentorship -- */
   const applyMentorship = async () => {
     if (!topic.trim()) return setError("Please enter a topic");
-    if (!schedTime)    return setError("Please pick your preferred date and time");
+    if (!selectedSlot) return setError("Please select an available time slot");
     setSubmitting(true);
     setError(null);
     try {
-      await api.post("/sessions/request", {
-        mentorId: selected._id,
-        learnerId: uid(),
+      await api.post(`/mentorship-requests/${uid()}/send-request`, {
+        slotId: selectedSlot._id,
         topic: topic.trim(),
-        learnerMessage: message,
-        duration: Number(duration),
-        requestedTimes: [schedTime]
+        message: message.trim()
       }, { headers: { Authorization: `Bearer ${token()}` } });
 
       setSuccess("\u2705 Mentorship request sent! You'll be notified once the mentor responds.");
       setSelected(null);
-      setTopic(""); setMessage(""); setDuration(60); setSchedTime("");
+      setTopic(""); 
+      setMessage(""); 
+      setSelectedSlot(null);
+      setAvailableSlots([]);
       setTimeout(() => { setTab("my-mentorships"); fetchMySessions(); }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to book mentorship");
-    } finally { setSubmitting(false); }
+      setError(err.response?.data?.message || "Failed to send mentorship request");
+    } finally { 
+      setSubmitting(false); 
+    }
   };
 
   const joinRoom = (session) => {
@@ -326,7 +346,11 @@ export default function BookSession() {
                   )}
 
                   <button style={{ ...S.btn("primary"), width: "100%" }}
-                    onClick={() => { setSelected(m); setError(null); }}>
+                    onClick={() => { 
+                      setSelected(m); 
+                      setError(null);
+                      fetchAvailableSlots(m._id);
+                    }}>
                     {"\uD83D\uDCE9"} Apply for Mentorship
                   </button>
                 </motion.div>
@@ -457,29 +481,61 @@ export default function BookSession() {
                 placeholder="e.g. React hooks, System design, Career advice..." />
 
               <label style={S.label}>Message to mentor (optional)</label>
-              <textarea style={{ ...S.input, marginBottom: "1rem", height: 75, resize: "vertical" }}
+              <textarea style={{ ...S.input, marginBottom: "1.5rem", height: 75, resize: "vertical" }}
                 value={message} onChange={e => setMessage(e.target.value)}
                 placeholder="Tell them your goals or what you need help with..." />
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-                <div>
-                  <label style={S.label}>Duration</label>
-                  <select style={{ ...S.input, background: "#1e293b", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }} value={duration} onChange={e => setDuration(e.target.value)}>
-                    {[30, 45, 60, 90, 120].map(d => <option key={d} value={d} style={{ background: "#1e293b", color: "#fff" }}>{d} min</option>)}
-                  </select>
+              {/* Available Slots */}
+              <label style={S.label}>Available Time Slots *</label>
+              {slotsLoading ? (
+                <div style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>
+                  ⏳ Loading available slots...
                 </div>
-                <div>
-                  <label style={S.label}>Date & Time *</label>
-                  <input type="datetime-local" style={S.input}
-                    value={schedTime} onChange={e => setSchedTime(e.target.value)} />
+              ) : availableSlots.length === 0 ? (
+                <div style={{
+                  padding: "1rem", textAlign: "center", color: "#64748b", marginBottom: "1.5rem",
+                  background: "rgba(248,113,113,0.1)", borderRadius: "0.6rem", border: "1px solid rgba(248,113,113,0.2)"
+                }}>
+                  ⚠️ No available slots at the moment. Try checking back later.
                 </div>
-              </div>
+              ) : (
+                <div style={{
+                  display: "grid", gap: "0.5rem", marginBottom: "1.5rem",
+                  maxHeight: "250px", overflowY: "auto", paddingRight: "0.5rem"
+                }}>
+                  {availableSlots.map(slot => {
+                    const isSelected = selectedSlot?._id === slot._id;
+
+                    return (
+                      <label key={slot._id} style={{
+                        display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem",
+                        background: isSelected ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.04)",
+                        border: isSelected ? "2px solid rgba(124,58,237,0.6)" : "1px solid rgba(255,255,255,0.09)",
+                        borderRadius: "0.6rem", cursor: "pointer", transition: "all 0.2s"
+                      }}>
+                        <input
+                          type="radio"
+                          name="slot"
+                          checked={isSelected}
+                          onChange={() => setSelectedSlot(slot)}
+                          style={{ cursor: "pointer", width: 18, height: 18 }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                            📅 {slot.date} – {slot.startTime}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "0.75rem" }}>
                 <button style={{ ...S.btn("primary"), flex: 1, opacity: submitting ? 0.7 : 1 }} onClick={applyMentorship} disabled={submitting}>
                   {submitting ? "\u23F3 Sending Request..." : "\uD83D\uDCE9 Send Mentorship Request"}
                 </button>
-                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); }}>Cancel</button>
+                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); setSelectedSlot(null); }}>Cancel</button>
               </div>
             </motion.div>
           </motion.div>

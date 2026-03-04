@@ -24,6 +24,10 @@ const SessionSchema = new mongoose.Schema({
     roomId: { type: String, default: null },    // UUID set when mentor confirms
     meetingLink: { type: String, default: '' }, // /room/:roomId (internal)
 
+    // ── Slot-based mentorship booking ─────────────────────────────────────────
+    slotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MentorSlot', default: null }, // linked slot
+    mentorshipRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MentorshipRequest', default: null }, // request that created this
+
     // ── Learner-initiated request ──────────────────────────────────────────────
     requestedTimes: [{ type: Date }],           // preferred slots sent by learner
     learnerMessage: { type: String, default: '' }, // learner's request message

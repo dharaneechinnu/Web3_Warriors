@@ -731,6 +731,22 @@ const MentorHome = () => {
           <SectionTitle>⚡ Mentor Tools</SectionTitle>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
             <button
+              onClick={() => navigate('/mentor/slots')}
+              style={{
+                background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.75rem',
+                padding: '1rem 2rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                flex: '1 1 200px',
+              }}
+            >
+              🕐 Manage Time Slots
+            </button>
+            <button
               onClick={() => navigate('/mentor/sessions')}
               style={{
                 background: 'linear-gradient(135deg, #f97316, #ef4444)',

@@ -37,6 +37,7 @@ import SessionManagement from './pages/mentor/SessionManagement';
 import SubmissionReview from './pages/mentor/SubmissionReview';
 import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
 import MentorMyCourses from './pages/mentor/MentorMyCourses';
+import MentorSlotManagement from './pages/mentor/MentorSlotManagement';
 import BookSession from './pages/learner/BookSession';
 import VideoRoom from './pages/VideoRoom';
 
@@ -233,6 +234,9 @@ function AppRoutes() {
         } />
         <Route path="/mentor/my-courses" element={
           <ProtectedRoute><MentorMyCourses /></ProtectedRoute>
+        } />
+        <Route path="/mentor/slots" element={
+          <ProtectedRoute><MentorSlotManagement /></ProtectedRoute>
         } />
 
         {/* Catch all route - redirect based on auth state */}
