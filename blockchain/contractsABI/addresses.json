@@ -1,0 +1,9 @@
+{
+  "network": "ganache",
+  "chainId": 1337,
+  "deployer": "",
+  "deployedAt": "",
+  "SkillToken": "",
+  "SkillCredentialNFT": "",
+  "SkillPlatform": ""
+}

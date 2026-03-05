@@ -235,6 +235,9 @@ app.use("/mentor-application", require("./Router/mentorApplicationRoutes"));
 // Admin panel (mentor approval / rejection)
 app.use("/api/admin", require("./Router/adminRoutes"));
 
+// Web3 on-chain operations (courses, challenges, NFTs)
+app.use("/web3", require("./Router/web3Routes"));
+
 httpServer.listen(PORT, () => {
     console.log(`Server is running on PORT: ${PORT} (HTTP + WebSocket)`);
 });
