@@ -3,12 +3,7 @@ import { motion } from "framer-motion";
 import api from "../../services/api";
 import { assetUrl } from "../../config";
 
-const statusColors = {
-  submitted: "bg-yellow-700 text-yellow-100",
-  graded: "bg-green-700 text-green-100",
-  returned: "bg-blue-700 text-blue-100",
-  needs_revision: "bg-red-700 text-red-100",
-};
+// `statusColors` removed (unused) to satisfy linter and avoid CI build failure
 
 const SubmissionReview = () => {
   const [courses, setCourses] = useState([]);
