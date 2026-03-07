@@ -690,17 +690,6 @@ const NextButton = styled.button`
   }
 `;
 
-const CompletionMessage = styled.div`
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-`;
 
 // Quiz Component
 const QuizContent = ({ quiz, onSubmit, result, currentAttempts = 0, onRetry }) => {
@@ -1150,7 +1139,6 @@ const LearnerCourseView = () => {
   const [expandedSections, setExpandedSections] = useState({});
   const [videoProgress, setVideoProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showControls, setShowControls] = useState(false);
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
   const [videoWatchedPercentage, setVideoWatchedPercentage] = useState(0);
   const [hasVideoStarted, setHasVideoStarted] = useState(false);
@@ -1168,7 +1156,6 @@ const LearnerCourseView = () => {
   const [autoResumeActive, setAutoResumeActive] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(0); // Track last time progress was saved
   const [isLoadingLecture, setIsLoadingLecture] = useState(false); // Loading state for lecture switching
-  const saveIntervalRef = React.useRef(null); // Ref for periodic save interval
 
   // Helper function to format time for resume indicator
   const formatTime = (seconds) => {
@@ -1541,37 +1528,7 @@ const LearnerCourseView = () => {
     }
   };
 
-  // Fetch saved progress for current lecture (legacy method)
-  const fetchLectureProgressLegacy = async (lectureId) => {
-    try {
-      const userId = localStorage.getItem('userId');
-      console.log('📡 CLIENT: Fetching lecture progress:', {
-        userId,
-        courseId,
-        lectureId,
-        endpoint: `/courses/progress/${userId}/${courseId}`
-      });
-      
-      const response = await api.get(`/courses/progress/${userId}/${courseId}`);
-      
-      if (response.data.success) {
-        const lectureProgress = response.data.progress.lectureProgress.find(
-          p => p.lectureId === lectureId
-        );
-        
-        console.log('📊 CLIENT: Fetched progress data:', {
-          totalRecords: response.data.progress.lectureProgress.length,
-          foundLectureProgress: lectureProgress,
-          allProgress: response.data.progress.lectureProgress
-        });
-        
-        return lectureProgress || null;
-      }
-    } catch (error) {
-      console.error('❌ CLIENT: Error fetching lecture progress:', error.response?.data || error.message);
-    }
-    return null;
-  };
+ 
 
   // Video event handlers
   const handleVideoTimeUpdate = (currentTime, duration) => {
@@ -1712,36 +1669,7 @@ const LearnerCourseView = () => {
     }
   };
 
-  // Update lecture progress on server
-  const updateLectureProgress = async (lectureId, watchedTime, progressPercent) => {
-    try {
-      const userId = localStorage.getItem('userId');
-      const completed = progressPercent >= 90;
-      
-      console.log('🔄 CLIENT: updateLectureProgress (legacy) called:', {
-        lectureId,
-        watchedTime,
-        progressPercent,
-        completed
-      });
-      
-      await api.post('/courses/updateLectureProgress', {
-        learnerId: userId,
-        courseId: courseId,
-        lectureId: lectureId,
-        sectionId: currentLecture?.sectionId || null,
-        currentTime: watchedTime,
-        videoProgress: progressPercent,
-        progress: Math.round(progressPercent),
-        completed: completed,
-        contentType: 'video'
-      });
-      
-      console.log('✅ CLIENT: Legacy progress update successful');
-    } catch (error) {
-      console.error('❌ CLIENT: Error updating lecture progress (legacy):', error.response?.data || error.message);
-    }
-  };
+
 
   const fetchCourseData = async () => {
     try {
@@ -2140,23 +2068,6 @@ const LearnerCourseView = () => {
     }
   };
 
-  const handleCourseProgressUpdate = (courseProgress) => {
-    if (courseProgress) {
-      setOverallCourseProgress(courseProgress.overallProgress || 0);
-      console.log(`Course progress updated: ${courseProgress.overallProgress}%`);
-    }
-  };
-
-  const handleLectureComplete = (lectureId) => {
-    console.log(`Lecture ${lectureId} completed`);
-    // Refresh progress data to ensure UI is updated
-    fetchUserProgress().then(() => {
-      // Auto-advance to next lecture after progress is updated
-      setTimeout(() => {
-        autoAdvanceToNextLecture();
-      }, 1500);
-    });
-  };
 
   const markLectureCompleted = async (lectureId, contentType = 'video') => {
     try {
@@ -2533,15 +2444,6 @@ const LearnerCourseView = () => {
     }
   };
 
-  const handleVideoProgress = (event) => {
-    const progress = (event.target.currentTime / event.target.duration) * 100;
-    setVideoProgress(progress);
-    
-    // Auto-complete when video reaches 90%
-    if (progress >= 90 && !userProgress[currentLecture._id]?.completed) {
-      markLectureCompleted(currentLecture._id);
-    }
-  };
 
   const getLectureStatus = (lecture, sectionId) => {
     // Check if lecture is completed in new progress structure

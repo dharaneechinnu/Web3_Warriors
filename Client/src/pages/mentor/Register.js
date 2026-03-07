@@ -20,6 +20,7 @@ function RegisterMentor(){
   const [formData,setFormData] = useState({name:'',email:'',password:'',dob:'',gender:'',mobileNo:'',role:'mentor'});
   const [error,setError] = useState(null);
   const [loading,setLoading] = useState(false);
+  const todayStr = new Date().toISOString().split('T')[0];
 
   const handleSubmit = async (e)=>{
     e.preventDefault();
@@ -33,8 +34,20 @@ function RegisterMentor(){
       }
       const dobDate = new Date(formData.dob);
       const today = new Date();
-      if (dobDate > today) {
+      if (isNaN(dobDate.getTime())) {
+        setError('Please enter a valid date of birth');
+        setLoading(false);
+        return;
+      }
+      const year = dobDate.getFullYear();
+      if (year > today.getFullYear()) {
         setError('Date of birth cannot be in the future');
+        setLoading(false);
+        return;
+      }
+      // Reject unrealistic years (e.g. 200000). Allow reasonable historical range.
+      if (year < 1900 || year > today.getFullYear()) {
+        setError('Please enter a realistic year of birth');
         setLoading(false);
         return;
       }
@@ -64,7 +77,18 @@ function RegisterMentor(){
     }finally{setLoading(false)}
   }
 
-  const handleChange = (e)=>{const {name,value}=e.target; setFormData(prev=>({...prev,[name]:value}));}
+  const handleChange = (e)=>{
+    const {name,value} = e.target;
+    if (name === 'dob') {
+      // sanitize year to max 4 digits and ensure YYYY-MM-DD format
+      const parts = value.split('-');
+      if (parts[0] && parts[0].length > 4) parts[0] = parts[0].slice(0,4);
+      const sanitized = parts.filter(Boolean).join('-');
+      setFormData(prev=>({...prev,[name]:sanitized}));
+      return;
+    }
+    setFormData(prev=>({...prev,[name]:value}));
+  }
 
   return (
     <Container>
