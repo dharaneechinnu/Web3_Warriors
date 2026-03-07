@@ -190,7 +190,7 @@ app.use(
       }
       else if (filePath.endsWith(".mov")) {
         res.setHeader("Content-Type", "video/quicktime");
-      }
+      }//
 
       // PDF
       else if (filePath.endsWith(".pdf")) {
