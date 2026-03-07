@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import  { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,7 +20,6 @@ function RegisterMentor(){
   const [formData,setFormData] = useState({name:'',email:'',password:'',dob:'',gender:'',mobileNo:'',role:'mentor'});
   const [error,setError] = useState(null);
   const [loading,setLoading] = useState(false);
-  const todayStr = new Date().toISOString().split('T')[0];
 
   const handleSubmit = async (e)=>{
     e.preventDefault();
