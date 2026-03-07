@@ -1,4 +1,10 @@
-require('dotenv').config();
+const dotenv = require('dotenv');
+// Load environment-specific file first (.env.development or .env.production),
+// then fall back to .env so VPS deployments (which only have .env) still work.
+const NODE_ENV = process.env.NODE_ENV || 'development';
+dotenv.config({ path: `.env.${NODE_ENV}` });
+dotenv.config(); // fallback: loads .env without overriding already-set vars
+
 const express= require("express");
 const app = express();
 const http = require('http');

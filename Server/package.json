@@ -4,13 +4,17 @@
   "main": "Server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon Server.js",
-    "create-admin": "node scripts/createAdmin.js"
+    "dev": "cross-env NODE_ENV=development nodemon Server.js",
+    "start": "cross-env NODE_ENV=production node Server.js",
+    "create-admin": "cross-env NODE_ENV=development node scripts/createAdmin.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.6",
