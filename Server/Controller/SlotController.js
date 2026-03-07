@@ -3,37 +3,41 @@ const MentorAvailability = require('../Model/MentorAvailabilityModel');
 const User = require('../Model/UserModel');
 
 // Helper: Generate 60-minute slots from start to end time
+// Uses Date.UTC() to parse the date portion so the server's local timezone
+// never shifts the date (e.g., "2026-03-09" + UTC midnight is always March 9).
+// Hours are then applied as UTC offsets to match the same wall-clock intent.
 const generateSlots = (date, startTime, endTime, mentorId) => {
     const slots = [];
     const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    
-    let currentDate = new Date(date);
-    currentDate.setHours(startHour, startMin, 0, 0);
-    
-    const endDateTime = new Date(date);
-    endDateTime.setHours(endHour, endMin, 0, 0);
-    
-    while (currentDate < endDateTime) {
-        const slotStart = new Date(currentDate);
-        const slotEnd = new Date(currentDate);
-        slotEnd.setHours(slotEnd.getHours() + 1); // 60-minute slots
-        
-        if (slotEnd <= endDateTime) {
+    const [endHour, endMin]     = endTime.split(':').map(Number);
+    const [year, month, day]    = date.split('-').map(Number);
+
+    // Build timestamps entirely in UTC so the date never drifts
+    let cursor      = new Date(Date.UTC(year, month - 1, day, startHour, startMin, 0, 0));
+    const endMs     = new Date(Date.UTC(year, month - 1, day, endHour,   endMin,   0, 0)).getTime();
+
+    while (cursor.getTime() < endMs) {
+        const slotEnd = new Date(cursor.getTime() + 60 * 60000); // +1 hour
+        if (slotEnd.getTime() <= endMs) {
             slots.push({
                 mentorId,
-                availabilityId: null, // Direct slot creation, not from availability
-                startTime: new Date(slotStart),
-                endTime: new Date(slotEnd),
+                availabilityId: null,
+                startTime: new Date(cursor),
+                endTime:   new Date(slotEnd),
                 status: 'available'
             });
         }
-        
-        currentDate.setHours(currentDate.getHours() + 1);
+        cursor = new Date(cursor.getTime() + 60 * 60000);
     }
-    
+
     return slots;
 };
+
+// Mongoose ObjectId validator (avoids CastError 500s)
+const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
+
+// IST locale helper — used for human-readable display strings
+const toIST = (d, opts) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', ...opts });
 
 // ── CREATE SLOTS FOR A MENTOR ──────────────────────────────────────────────────
 exports.createSlots = async (req, res) => {
@@ -90,75 +94,57 @@ exports.getAvailableSlots = async (req, res) => {
         const { mentorId } = req.params;
         const { date } = req.query;
 
+        // Guard: reject non-ObjectId strings before Mongoose CastError
+        if (!isValidObjectId(mentorId)) {
+            return res.status(400).json({ success: false, message: 'Invalid mentor ID format' });
+        }
+
         // Validate mentor exists
         const mentor = await User.findById(mentorId);
         if (!mentor) {
-            return res.status(404).json({
-                success: false,
-                message: 'Mentor not found'
-            });
+            return res.status(404).json({ success: false, message: 'Mentor not found' });
         }
 
-        // Build query filter
-        const filter = {
-            mentorId,
-            status: 'available'
-        };
+        const filter = { mentorId, status: 'available' };
 
-        // If date is specified, filter for that date
         if (date) {
-            const startOfDay = new Date(date);
-            startOfDay.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(date);
-            endOfDay.setHours(23, 59, 59, 999);
-            
+            // Filter for a specific date — use Date.UTC to avoid local-TZ drift
+            const [y, m, d] = date.split('-').map(Number);
             filter.startTime = {
-                $gte: startOfDay,
-                $lte: endOfDay
+                $gte: new Date(Date.UTC(y, m - 1, d,  0,  0,  0,   0)),
+                $lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
             };
         } else {
-            // Default: show slots from today onwards (next 30 days)
-            const now = new Date();
-            const thirtyDaysLater = new Date(now);
-            thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
-            
-            filter.startTime = {
-                $gte: now,
-                $lte: thirtyDaysLater
-            };
+            // Use start of today (UTC midnight) so slots created for today
+            // still appear even if their wall-clock time has already passed.
+            // Also extends the window to 90 days for forward-planning mentors.
+            const startOfToday = new Date();
+            startOfToday.setUTCHours(0, 0, 0, 0);
+
+            const ninetyDaysLater = new Date(startOfToday);
+            ninetyDaysLater.setUTCDate(ninetyDaysLater.getUTCDate() + 90);
+
+            filter.startTime = { $gte: startOfToday, $lte: ninetyDaysLater };
         }
 
-        // Fetch slots sorted by start time
-        const slots = await MentorSlot.find(filter)
-            .sort({ startTime: 1 })
-            .lean();
+        const slots = await MentorSlot.find(filter).sort({ startTime: 1 }).lean();
 
         res.json({
             success: true,
+            count: slots.length,
             slots: slots.map(slot => ({
-                _id: slot._id,
-                date: slot.startTime.toLocaleDateString('en-IN'),
-                startTime: slot.startTime.toLocaleTimeString('en-IN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                }),
-                endTime: slot.endTime.toLocaleTimeString('en-IN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                }),
-                displayText: `${slot.startTime.toLocaleDateString('en-IN')} – ${slot.startTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
+                _id:         slot._id,
+                date:        toIST(slot.startTime, { dateStyle: 'medium' }),
+                startTime:   toIST(slot.startTime, { hour: '2-digit', minute: '2-digit', hour12: true }),
+                endTime:     toIST(slot.endTime,   { hour: '2-digit', minute: '2-digit', hour12: true }),
+                displayText: toIST(slot.startTime, { dateStyle: 'medium', timeStyle: 'short' }),
                 startTimeRaw: slot.startTime,
-                endTimeRaw: slot.endTime
+                endTimeRaw:   slot.endTime
             }))
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        console.error('[getAvailableSlots] error:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 

@@ -91,6 +91,7 @@ export default function BookSession() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsFetchError, setSlotsFetchError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -137,14 +138,26 @@ export default function BookSession() {
   /* -- fetch available slots for mentor -- */
   const fetchAvailableSlots = async (mentorId) => {
     setSlotsLoading(true);
+    setSlotsFetchError(null);
     try {
       const res = await api.get(`/slots/mentor/${mentorId}/available`, {
         headers: { Authorization: `Bearer ${token()}` }
       });
+      if (!res.data.success && !res.data.slots) {
+        throw new Error(res.data.message || "Unexpected response from server");
+      }
       const slots = res.data.slots || [];
-      setAvailableSlots(slots.sort((a, b) => new Date(a.startTimeRaw) - new Date(b.startTimeRaw)));
+      setAvailableSlots(
+        slots.sort((a, b) => new Date(a.startTimeRaw || a.startTime) - new Date(b.startTimeRaw || b.startTime))
+      );
     } catch (err) {
-      console.error("[BookSession] fetch slots error:", err);
+      console.error("[BookSession] fetch slots error:", err?.response?.data || err.message);
+      const msg =
+        err?.response?.status === 400 ? "Invalid mentor — cannot load slots." :
+        err?.response?.status === 404 ? "Mentor not found." :
+        err?.response?.status >= 500  ? "Server error while loading slots. Please retry." :
+        err?.message || "Failed to load available slots. Please try again.";
+      setSlotsFetchError(msg);
       setAvailableSlots([]);
     } finally {
       setSlotsLoading(false);
@@ -347,8 +360,11 @@ export default function BookSession() {
 
                   <button style={{ ...S.btn("primary"), width: "100%" }}
                     onClick={() => { 
-                      setSelected(m); 
+                      setSelected(m);
                       setError(null);
+                      setSlotsFetchError(null);
+                      setAvailableSlots([]);
+                      setSelectedSlot(null);
                       fetchAvailableSlots(m._id);
                     }}>
                     {"\uD83D\uDCE9"} Apply for Mentorship
@@ -444,7 +460,7 @@ export default function BookSession() {
               position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000,
               display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem"
             }}
-            onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}
+            onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setSlotsFetchError(null); } }}
           >
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
@@ -488,15 +504,39 @@ export default function BookSession() {
               {/* Available Slots */}
               <label style={S.label}>Available Time Slots *</label>
               {slotsLoading ? (
-                <div style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>
+                <div style={{ padding: "1rem", textAlign: "center", color: "#94a3b8", marginBottom: "1.5rem" }}>
                   ⏳ Loading available slots...
+                </div>
+              ) : slotsFetchError ? (
+                <div style={{
+                  padding: "1rem", textAlign: "center", marginBottom: "1.5rem",
+                  background: "rgba(239,68,68,0.08)", borderRadius: "0.6rem",
+                  border: "1px solid rgba(239,68,68,0.25)"
+                }}>
+                  <div style={{ color: "#fca5a5", fontSize: "0.9rem", marginBottom: "0.75rem" }}>⚠️ {slotsFetchError}</div>
+                  <button
+                    style={{ ...S.btn(""), fontSize: "0.8rem", padding: "0.4rem 1rem" }}
+                    onClick={() => fetchAvailableSlots(selected._id)}
+                  >
+                    🔄 Retry
+                  </button>
                 </div>
               ) : availableSlots.length === 0 ? (
                 <div style={{
                   padding: "1rem", textAlign: "center", color: "#64748b", marginBottom: "1.5rem",
-                  background: "rgba(248,113,113,0.1)", borderRadius: "0.6rem", border: "1px solid rgba(248,113,113,0.2)"
+                  background: "rgba(255,255,255,0.03)", borderRadius: "0.6rem",
+                  border: "1px solid rgba(255,255,255,0.08)"
                 }}>
-                  ⚠️ No available slots at the moment. Try checking back later.
+                  <div style={{ fontSize: "1.5rem", marginBottom: "0.4rem" }}>📭</div>
+                  <div style={{ color: "#94a3b8", fontSize: "0.85rem", marginBottom: "0.6rem" }}>
+                    This mentor has no available slots right now.
+                  </div>
+                  <button
+                    style={{ ...S.btn(""), fontSize: "0.8rem", padding: "0.4rem 1rem" }}
+                    onClick={() => fetchAvailableSlots(selected._id)}
+                  >
+                    🔄 Refresh
+                  </button>
                 </div>
               ) : (
                 <div style={{
@@ -535,7 +575,7 @@ export default function BookSession() {
                 <button style={{ ...S.btn("primary"), flex: 1, opacity: submitting ? 0.7 : 1 }} onClick={applyMentorship} disabled={submitting}>
                   {submitting ? "\u23F3 Sending Request..." : "\uD83D\uDCE9 Send Mentorship Request"}
                 </button>
-                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); setSelectedSlot(null); }}>Cancel</button>
+                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); setSelectedSlot(null); setSlotsFetchError(null); }}>Cancel</button>
               </div>
             </motion.div>
           </motion.div>
