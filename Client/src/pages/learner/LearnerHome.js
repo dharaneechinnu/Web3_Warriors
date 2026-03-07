@@ -362,57 +362,11 @@ const InfoText = styled.p`
   border-radius: 0.3rem;
 `;
 
-const NotificationCard = styled(motion.div)`
-  background: rgba(30, 41, 59, 0.6);
-  border-radius: 0.8rem;
-  padding: 1.2rem;
-  margin-bottom: 1rem;
-  border-left: 4px solid ${props => {
-    if (props.type === 'feedback') return '#06b6d4';
-    if (props.type === 'approval') return '#22c55e';
-    if (props.type === 'credential') return '#d946ef';
-    return '#f97316';
-  }};
-  transition: all 0.3s ease;
-
-  &:hover {
-    transform: translateX(5px);
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
-  }
-`;
-
-const NotificationTitle = styled.h4`
-  font-size: 1rem;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 0.3rem;
-`;
-
-const NotificationMessage = styled.p`
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 0.5rem;
-`;
-
-const NotificationTime = styled.p`
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
-`;
-
 const EmptyState = styled.div`
   text-align: center;
   padding: 3rem;
   color: rgba(255, 255, 255, 0.5);
   font-size: 1rem;
-`;
-
-const ProgressText = styled.div`
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
-  margin: 0.5rem 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 `;
 
 // ============= MAIN COMPONENT =============
@@ -437,6 +391,7 @@ const LearnerHome = () => {
 
   useEffect(() => {
     fetchLearnerData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchLearnerData = async () => {

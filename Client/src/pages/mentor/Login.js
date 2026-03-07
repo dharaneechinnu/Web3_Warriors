@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../../config';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthBackground from "@/components/ui/AuthBackground";
-import { Heading2, Paragraph, GradientSpan } from "@/components/ui/Typography";
+import { Heading2, GradientSpan } from "@/components/ui/Typography";
 
 const LoginContainer = styled.div`
   min-height: 100vh;

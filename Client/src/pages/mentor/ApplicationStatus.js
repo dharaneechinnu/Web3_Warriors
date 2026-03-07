@@ -364,6 +364,7 @@ const ApplicationStatus = () => {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadApplication(); }, []);
 
   // Auto-refresh while evaluation is pending
@@ -377,6 +378,7 @@ const ApplicationStatus = () => {
     }, 15000); // every 15 seconds
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app]);
 
   if (loading) {

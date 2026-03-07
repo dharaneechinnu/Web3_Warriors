@@ -23,9 +23,8 @@ const S = {
               : v === "danger"  ? "rgba(239,68,68,0.15)"
               : v === "success" ? "rgba(34,197,94,0.15)"
               : "rgba(255,255,255,0.08)",
-    color: v === "danger" ? "#ef4444" : v === "success" ? "#22c55e" : "#fff", 
-    transition: "opacity 0.2s",
-    cursor: "pointer"
+    color: v === "danger" ? "#ef4444" : v === "success" ? "#22c55e" : "#fff",
+    transition: "opacity 0.2s"
   }),
   input: {
     width: "100%", padding: "0.7rem 1rem", borderRadius: "0.6rem",
@@ -68,6 +67,7 @@ export default function MentorSlotManagement() {
   // Fetch slots on component mount
   useEffect(() => {
     fetchSlots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSlots = async () => {

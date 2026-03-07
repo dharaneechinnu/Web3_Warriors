@@ -431,6 +431,7 @@ const MentorHome = () => {
         setVerificationStatus('pending'); // assume pending if error
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchMentorData = async () => {
