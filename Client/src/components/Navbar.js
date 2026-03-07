@@ -71,10 +71,21 @@ const Logo = styled(Link)`
 `
 
 // ── Local state: mentor verification status ──
-// when a mentor is not approved we redirect certain links to application status instead
-const useMentorVerification = () => {
+// Accepts isAuthenticated so the hook re-fetches whenever auth state changes
+// (fixes the bug where coming from the login page left verificationStatus stale)
+const useMentorVerification = (isAuthenticated) => {
   const [verificationStatus, setVerificationStatus] = useState(null);
   useEffect(() => {
+    // Skip entirely if not authenticated or not a mentor role
+    if (!isAuthenticated) {
+      setVerificationStatus(null);
+      return;
+    }
+    const roleInStorage = localStorage.getItem('userRole');
+    if (roleInStorage !== 'mentor') {
+      setVerificationStatus(null);
+      return;
+    }
     let mounted = true;
     const load = async () => {
       try {
@@ -92,7 +103,7 @@ const useMentorVerification = () => {
     };
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [isAuthenticated]); // re-run when auth changes so we never use a stale status
   return verificationStatus;
 }
 
@@ -558,7 +569,7 @@ const Navbar = () => {
   // ── Router & Auth hooks must come first ─────────────────────────────────
   const { isAuthenticated, user, logout, loading } = useAuth()
   const location = useLocation()
-  const verificationStatus = useMentorVerification();
+  const verificationStatus = useMentorVerification(isAuthenticated);
   const navigate = useNavigate()
 
   // ── UI state ─────────────────────────────────────────────────────────────
