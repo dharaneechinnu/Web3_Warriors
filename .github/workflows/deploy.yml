@@ -10,33 +10,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+
+            set -e
+
+            echo "Starting deployment..."
+
             cd /var/www/Web3_Warriors
-            
-            # Save .env files before pull
+
+            # Backup env files
             cp Server/.env /tmp/server_env_backup 2>/dev/null || true
             cp Client/.env /tmp/client_env_backup 2>/dev/null || true
-            
-            git fetch --all
+
+            echo "Pulling latest code..."
+            git fetch origin main
             git reset --hard origin/main
-            
-            # Restore .env files after pull
+
+            # Restore env files
             cp /tmp/server_env_backup Server/.env 2>/dev/null || true
             cp /tmp/client_env_backup Client/.env 2>/dev/null || true
-            
+
+            echo "Installing backend dependencies..."
             cd Server
-            npm install
-            npm install uuid@9 --save
-            pm2 restart Server
-            
+            npm install --production
+
+            echo "Restarting backend with PM2..."
+            pm2 restart Server || pm2 start index.js --name Server
+
+            echo "Building frontend..."
             cd ../Client
             npm install --legacy-peer-deps
             npm run build
-            
-            systemctl restart nginx
+
+            echo "Restarting Nginx..."
+            sudo systemctl restart nginx
+
+            echo "Deployment completed successfully!"
