@@ -6,71 +6,37 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Build frontend
-        working-directory: Client
-        run: |
-          npm ci --legacy-peer-deps
-          npm run build
-
-      # Upload the build to a staging dir on the VPS.
-      # scp-action mirrors the source path, so files arrive at:
-      #   /tmp/frontend_deploy/Client/build/index.html  etc.
-      # The SSH step below rsyncs them into the real nginx web root.
-      - name: Upload frontend build to VPS
-        uses: appleboy/scp-action@v0.1.7
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          source: "Client/build/"
-          target: "/tmp/frontend_deploy"
-
-      - name: Deploy backend & activate frontend on VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
           script: |
-            set -euo pipefail
-
-            # ── 1. Swap frontend build into nginx web root ─────────────────
-            # rsync atomically replaces only changed files; --delete removes
-            # stale files that no longer exist in the new build.
-            rsync -a --delete /tmp/frontend_deploy/Client/build/ /var/www/frontend/
-            rm -rf /tmp/frontend_deploy
-
-            # ── 2. Pull latest backend code ────────────────────────────────
-            # Server/.env is gitignored — git pull never touches it.
-            # It is set up manually ONCE on the VPS and never modified by CI/CD.
-            git -C /var/www/Web3_Warriors pull origin main
-
-            # ── 3. Install production-only dependencies ─────────────────────
-            cd /var/www/Web3_Warriors/Server
-            npm install --omit=dev
-
-            # ── 4. Reload backend — zero-downtime graceful reload ──────────
-            # pm2 reload sends SIGINT to old workers only after new ones are ready.
-            # Falls back to a fresh start if the process does not exist yet.
-            if pm2 list | grep -q "\bServer\b"; then
-              pm2 reload Server
-            else
-              pm2 start npm --name Server -- run start
-            fi
-
-            # ── 5. Reload nginx — graceful, no dropped connections ─────────
-            nginx -s reload
+            cd /var/www/Web3_Warriors
+            
+            # Save .env files before pull
+            cp Server/.env /tmp/server_env_backup 2>/dev/null || true
+            cp Client/.env /tmp/client_env_backup 2>/dev/null || true
+            
+            git fetch --all
+            git reset --hard origin/main
+            
+            # Restore .env files after pull
+            cp /tmp/server_env_backup Server/.env 2>/dev/null || true
+            cp /tmp/client_env_backup Client/.env 2>/dev/null || true
+            
+            cd Server
+            npm install
+            npm install uuid@9 --save
+            pm2 restart Server
+            
+            cd ../Client
+            npm install --legacy-peer-deps
+            npm run build
+            
+            systemctl restart nginx
