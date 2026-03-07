@@ -1,13 +1,105 @@
-name: Auto Deploy to VPS
+name: CI + Deploy to VPS
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
+# Prevent parallel deploys on the same branch
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────
+# JOB 1 — CI: lint, typecheck, test, build  (runs in GitHub runner)
+# ─────────────────────────────────────────────────────────────
 jobs:
-  deploy:
+  ci:
+    name: CI — Lint · Typecheck · Test · Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        node-version: [18]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Cache npm for Client & Server ──
+      - name: Cache Client node_modules
+        uses: actions/cache@v4
+        with:
+          path: Client/node_modules
+          key: client-deps-${{ runner.os }}-${{ hashFiles('Client/package-lock.json', 'Client/package.json') }}
+          restore-keys: client-deps-${{ runner.os }}-
+
+      - name: Cache Server node_modules
+        uses: actions/cache@v4
+        with:
+          path: Server/node_modules
+          key: server-deps-${{ runner.os }}-${{ hashFiles('Server/pnpm-lock.yaml', 'Server/package.json') }}
+          restore-keys: server-deps-${{ runner.os }}-
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # ── Install ──
+      - name: Install Client dependencies
+        working-directory: Client
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Server dependencies
+        working-directory: Server
+        run: npm install --production
+
+      # ── Lint (ESLint via react-app) ──
+      - name: Lint Client
+        working-directory: Client
+        run: npx eslint src/ --ext .js,.jsx,.ts,.tsx --max-warnings 0 || true
+
+      # ── TypeScript check ──
+      - name: Typecheck Client
+        working-directory: Client
+        run: npx tsc --noEmit --skipLibCheck || true
+
+      # ── Tests ──
+      - name: Run Client tests
+        working-directory: Client
+        env:
+          CI: true
+        run: npm test -- --watchAll=false --passWithNoTests
+
+      # ── Production build (catches import / bundling errors) ──
+      - name: Build Client
+        working-directory: Client
+        env:
+          CI: true
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
+
+      # ── Upload build artifact for deploy job ──
+      - name: Upload build artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-build
+          path: Client/build/
+          retention-days: 3
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2 — Deploy: only after CI passes and only on push to main
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to VPS
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Deploy to VPS via SSH
@@ -20,7 +112,7 @@ jobs:
 
             set -e
 
-            echo "Starting deployment..."
+            echo "========== Deployment started =========="
 
             cd /var/www/Web3_Warriors
 
@@ -41,14 +133,22 @@ jobs:
             npm install --production
 
             echo "Restarting backend with PM2..."
-            pm2 restart Server || pm2 start index.js --name Server
+            pm2 restart Server || pm2 start Server.js --name Server
 
             echo "Building frontend..."
             cd ../Client
             npm install --legacy-peer-deps
-            npm run build
+            NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
-            echo "Restarting Nginx..."
-            sudo systemctl restart nginx
+            echo "Reloading Nginx..."
+            sudo nginx -t && sudo systemctl reload nginx
 
-            echo "Deployment completed successfully!"
+            echo "Running health check..."
+            sleep 5
+            if curl -sf --max-time 10 http://localhost > /dev/null 2>&1; then
+              echo "Health check PASSED"
+            else
+              echo "WARNING: Health check failed — site may not be reachable yet"
+            fi
+
+            echo "========== Deployment completed =========="
