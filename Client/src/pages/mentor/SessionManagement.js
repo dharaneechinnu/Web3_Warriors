@@ -11,10 +11,7 @@ const uid = () => localStorage.getItem("userId");
 const fmt = (d) =>
   d ? new Date(d).toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" }) : "--";
 
-const isUpcoming = (s) => {
-  if (s.status !== "confirmed") return false;
-  return !s.completedAt;
-};
+// `isUpcoming` removed (unused) to satisfy linter and avoid build failure on CI
 
 /* -- styles -- */
 const S = {

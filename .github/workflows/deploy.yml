@@ -13,18 +13,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Build frontend
+      - name: Build frontend (Client)
         working-directory: Client
         run: |
+          echo "Installing frontend dependencies"
           npm ci --legacy-peer-deps
+          echo "Running build"
           npm run build
 
-      - name: Upload frontend build to VPS
+      - name: Upload built frontend to VPS
         uses: appleboy/scp-action@v0.1.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -34,7 +36,7 @@ jobs:
           source: "Client/build/*"
           target: "/var/www/frontend/"
 
-      - name: Restart server and nginx on VPS
+      - name: Restart server & nginx on VPS
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -44,14 +46,15 @@ jobs:
           script: |
             set -e
             cd /var/www/Web3_Warriors || exit 0
-
-            # Restore server env if a backup exists
+            # Restore env backups if present
             cp /tmp/server_env_backup Server/.env 2>/dev/null || true
 
-            # Install server dependencies and restart process manager
-            cd Server || exit 0
-            npm install --omit=dev || true
-            pm2 restart Server || pm2 start Server
+            # Restart server process (pm2) if available
+            if command -v pm2 >/dev/null 2>&1; then
+              cd Server || exit 0
+              npm install --omit=dev || true
+              pm2 restart Server || pm2 start Server
+            fi
 
-            # Ensure nginx picks up new frontend files
+            # Restart nginx (ignore failures)
             systemctl restart nginx || true
