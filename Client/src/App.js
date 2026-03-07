@@ -79,14 +79,53 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// Redirect authenticated users away from auth pages
+// Redirect authenticated users away from auth pages to their role home
 const AuthRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
+  if (isAuthenticated) {
+    const role = user?.role || localStorage.getItem('userRole');
+    if (role === 'mentor') return <Navigate to="/mentor-home" replace />;
+    if (role === 'admin')  return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to="/learner-home" replace />;
+  }
+
+  return children;
+};
+
+// Mentor-only route guard
+const MentorRoute = ({ children }) => {
+  const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <LoadingScreen />;
+  if (!isAuthenticated) return <Navigate to="/login/mentor" state={{ from: location }} replace />;
+
+  const role = user?.role || localStorage.getItem('userRole');
+  if (role !== 'mentor') {
+    // Learner trying to reach mentor pages — send them home
+    return <Navigate to="/learner-home" replace />;
+  }
+  return children;
+};
+
+// Learner-only route guard
+const LearnerRoute = ({ children }) => {
+  const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <LoadingScreen />;
+  if (!isAuthenticated) return <Navigate to="/login/learner" state={{ from: location }} replace />;
+
+  const role = user?.role || localStorage.getItem('userRole');
+  if (role !== 'learner') {
+    // Mentor / admin trying to reach learner-only pages — send them home
+    return <Navigate to="/mentor-home" replace />;
+  }
   return children;
 };
 
@@ -182,34 +221,34 @@ function AppRoutes() {
           </ProtectedRoute>
         } />
         <Route path="/learner-home" element={
-          <ProtectedRoute>
+          <LearnerRoute>
             <LearnerHome />
-          </ProtectedRoute>
+          </LearnerRoute>
         } />
         <Route path="/learner-dashboard" element={
-          <ProtectedRoute>
+          <LearnerRoute>
             <LearnerCourseDashboard />
-          </ProtectedRoute>
+          </LearnerRoute>
         } />
         <Route path="/learn/:courseId" element={
-          <ProtectedRoute>
+          <LearnerRoute>
             <CourseDetail />
-          </ProtectedRoute>
+          </LearnerRoute>
         } />
         <Route path="/mentor-home" element={
-          <ProtectedRoute>
+          <MentorRoute>
             <MentorHome />
-          </ProtectedRoute>
+          </MentorRoute>
         } />
         <Route path="/course-upload" element={
-          <ProtectedRoute>
+          <MentorRoute>
             <CourseUpload />
-          </ProtectedRoute>
+          </MentorRoute>
         } />
         <Route path="/mentor/course-creation-wizard" element={
-          <ProtectedRoute>
+          <MentorRoute>
             <CourseUpload />
-          </ProtectedRoute>
+          </MentorRoute>
         } />
         <Route path="/courses" element={<CourseList />} />
         <Route path="/course/:courseId" element={<CourseDetail />} />
@@ -250,32 +289,32 @@ function AppRoutes() {
           <ProtectedRoute><VideoRoom /></ProtectedRoute>
         } />
 
-        {/* Mentor feature routes */}
+        {/* Mentor-only feature routes */}
         <Route path="/mentor/challenges" element={
-          <ProtectedRoute><MentorChallenges /></ProtectedRoute>
+          <MentorRoute><MentorChallenges /></MentorRoute>
         } />
         <Route path="/mentor/sessions" element={
-          <ProtectedRoute><SessionManagement /></ProtectedRoute>
+          <MentorRoute><SessionManagement /></MentorRoute>
         } />
         <Route path="/mentor/submissions" element={
-          <ProtectedRoute><SubmissionReview /></ProtectedRoute>
+          <MentorRoute><SubmissionReview /></MentorRoute>
         } />
         <Route path="/mentor/profile" element={
-          <ProtectedRoute><MentorProfileDashboard /></ProtectedRoute>
+          <MentorRoute><MentorProfileDashboard /></MentorRoute>
         } />
         <Route path="/mentor/my-courses" element={
-          <ProtectedRoute><MentorMyCourses /></ProtectedRoute>
+          <MentorRoute><MentorMyCourses /></MentorRoute>
         } />
         <Route path="/mentor/slots" element={
-          <ProtectedRoute><MentorSlotManagement /></ProtectedRoute>
+          <MentorRoute><MentorSlotManagement /></MentorRoute>
         } />
 
         {/* ── Mentor Application routes ───────────────────────────── */}
         <Route path="/mentor/apply" element={
-          <ProtectedRoute><MentorApply /></ProtectedRoute>
+          <MentorRoute><MentorApply /></MentorRoute>
         } />
         <Route path="/mentor/application-status" element={
-          <ProtectedRoute><ApplicationStatus /></ProtectedRoute>
+          <MentorRoute><ApplicationStatus /></MentorRoute>
         } />
 
         {/* ── Admin Panel routes (isolated layout, no main Navbar) ── */}

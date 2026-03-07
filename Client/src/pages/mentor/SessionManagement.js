@@ -64,6 +64,22 @@ const S = {
     color: t === "error" ? "#fca5a5" : "#86efac",
     border: `1px solid ${t === "error" ? "#ef4444" : "#22c55e"}40`
   }),
+  input: {
+    width: "100%", padding: "0.7rem 1rem", borderRadius: "0.6rem",
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    color: "#fff", fontSize: "0.95rem", boxSizing: "border-box", outline: "none"
+  },
+  label: { display: "block", marginBottom: "0.35rem", color: "#94a3b8", fontSize: "0.85rem", fontWeight: 600 },
+  slotBadge: (status) => ({
+    display: "inline-block", padding: "0.22rem 0.8rem", borderRadius: "2rem",
+    fontSize: "0.72rem", fontWeight: 700,
+    background: status === "available" ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
+    color: status === "available" ? "#86efac" : "#fca5a5",
+    textTransform: "uppercase"
+  }),
+  slotGrid: {
+    display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem"
+  }
 };
 
 /* == component == */
@@ -78,6 +94,20 @@ const SessionManagement = () => {
   const [success, setSuccess]           = useState(null);
   const [verificationStatus, setVerificationStatus] = useState(null); // null|'pending'|'approved'|'rejected'|'not_applied'
 
+  /* -- slot management state -- */
+  const [slotForm, setSlotForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    startTime: "09:00",
+    endTime: "10:00"
+  });
+  const [slots, setSlots]             = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotSubmitting, setSlotSubmitting] = useState(false);
+  const [slotError, setSlotError]     = useState(null);
+  const [slotSuccess, setSlotSuccess] = useState(null);
+  const [selectedSlots, setSelectedSlots] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting]   = useState(false);
+
   /* -- fetch all mentor sessions -- */
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -91,6 +121,121 @@ const SessionManagement = () => {
     finally { setLoading(false); }
   }, [mentorId]);
 
+  /* -- fetch slots -- */
+  const fetchSlots = useCallback(async () => {
+    setSlotsLoading(true);
+    try {
+      const res = await api.get(`/slots/mentor/${mentorId}/all`, {
+        headers: { Authorization: `Bearer ${tok()}` }
+      });
+      setSlots(res.data.slots || []);
+    } catch (err) {
+      console.error("Failed to fetch slots:", err);
+    } finally {
+      setSlotsLoading(false);
+    }
+  }, [mentorId]);
+
+  const handleSlotChange = (e) => {
+    const { name, value } = e.target;
+    setSlotForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  /* Build optimistic slot preview cards client-side so they appear instantly */
+  const computeOptimisticSlots = (date, startTime, endTime) => {
+    const [sy, sm, sd] = date.split('-').map(Number);
+    const [sh, smin]   = startTime.split(':').map(Number);
+    const [eh, emin]   = endTime.split(':').map(Number);
+    let cursor = new Date(sy, sm - 1, sd, sh, smin, 0);
+    const end  = new Date(sy, sm - 1, sd, eh, emin, 0);
+    const out  = [];
+    while (cursor < end) {
+      const slotEnd = new Date(cursor.getTime() + 60 * 60000);
+      out.push({ _id: `opt-${cursor.getTime()}`, startTime: cursor.toISOString(), endTime: slotEnd.toISOString(), status: "available", _optimistic: true });
+      cursor = slotEnd;
+    }
+    return out;
+  };
+
+  const handleSlotSubmit = async (e) => {
+    e.preventDefault();
+    setSlotSubmitting(true);
+    setSlotError(null);
+    setSlotSuccess(null);
+    // Optimistic: show generated slots immediately in the grid
+    const optimistic = computeOptimisticSlots(slotForm.date, slotForm.startTime, slotForm.endTime);
+    const prevSlots  = slots;
+    if (optimistic.length > 0) setSlots(prev => [...prev, ...optimistic]);
+    try {
+      const res = await api.post(
+        `/slots/mentor/${mentorId}/create`,
+        slotForm,
+        { headers: { Authorization: `Bearer ${tok()}` } }
+      );
+      if (res.data.success) {
+        setSlotSuccess(`✅ ${res.data.message}`);
+        setSlotForm({ date: new Date().toISOString().split('T')[0], startTime: "09:00", endTime: "10:00" });
+        fetchSlots(); // replace optimistic entries with real server data
+        setTimeout(() => setSlotSuccess(null), 3000);
+      }
+    } catch (err) {
+      setSlots(prevSlots); // rollback optimistic entries
+      setSlotError(err.response?.data?.message || "Failed to create slots");
+    } finally {
+      setSlotSubmitting(false);
+    }
+  };
+
+  /* Single delete — optimistic remove, rollback on failure */
+  const handleDeleteSlot = async (slotId) => {
+    const prev = slots;
+    setSlots(s => s.filter(sl => sl._id !== slotId));
+    setSelectedSlots(sel => { const n = new Set(sel); n.delete(slotId); return n; });
+    try {
+      await api.delete(`/slots/${slotId}`, { headers: { Authorization: `Bearer ${tok()}` } });
+      setSlotSuccess("✅ Slot deleted");
+      setTimeout(() => setSlotSuccess(null), 2000);
+    } catch {
+      setSlots(prev); // rollback
+      setSlotError("Failed to delete slot. It has been restored.");
+    }
+  };
+
+  /* Bulk delete — optimistic, rollback on any failure */
+  const handleBulkDelete = async () => {
+    if (selectedSlots.size === 0) return;
+    const ids  = [...selectedSlots];
+    const prev = slots;
+    setSlots(s => s.filter(sl => !selectedSlots.has(sl._id)));
+    setSelectedSlots(new Set());
+    setBulkDeleting(true);
+    setSlotError(null);
+    try {
+      await Promise.all(ids.map(id => api.delete(`/slots/${id}`, { headers: { Authorization: `Bearer ${tok()}` } })));
+      setSlotSuccess(`✅ Deleted ${ids.length} slot${ids.length > 1 ? "s" : ""}`);
+      setTimeout(() => setSlotSuccess(null), 2500);
+    } catch {
+      setSlots(prev); // rollback all
+      setSelectedSlots(new Set(ids));
+      setSlotError("Some slots could not be deleted — they have been restored. Please try again.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const toggleSelectSlot = (id) => {
+    setSelectedSlots(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const formatSlotDateTime = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+  };
+
   useEffect(() => {
     // Check verification status before loading sessions
     getMyApplication().then(res => {
@@ -103,12 +248,19 @@ const SessionManagement = () => {
       }
     });
     fetchAll();
-  }, [fetchAll]);
+    fetchSlots();
+  }, [fetchAll, fetchSlots]);
 
   /* -- derived lists -- */
   const pending   = all.filter(s => s.status === "pending" || s.status === "requested");
   const upcoming  = all.filter(s => s.status === "confirmed");
   const completed = all.filter(s => s.status === "completed");
+
+  /* -- slot derived -- */
+  const availableSlots       = slots.filter(sl => sl.status === "available" && !sl._optimistic);
+  const allAvailableSelected = availableSlots.length > 0 && availableSlots.every(sl => selectedSlots.has(sl._id));
+  const toggleSelectAll      = () =>
+    setSelectedSlots(allAvailableSelected ? new Set() : new Set(availableSlots.map(sl => sl._id)));
 
   /* -- accept request -- */
   const acceptRequest = async (session) => {
@@ -264,6 +416,9 @@ const SessionManagement = () => {
           </button>
           <button style={S.tab(tab === "completed")} onClick={() => { setTab("completed"); setError(null); }}>
             🎓 Completed {completed.length > 0 && `(${completed.length})`}
+          </button>
+          <button style={S.tab(tab === "slots")} onClick={() => { setTab("slots"); setError(null); fetchSlots(); }}>
+            🗓️ Time Slots
           </button>
         </div>
 
@@ -441,6 +596,173 @@ const SessionManagement = () => {
                 </div>
               </motion.div>
             ))}
+          </>
+        )}
+
+        {/* -- TIME SLOTS -- */}
+        {tab === "slots" && (
+          <>
+            {slotError   && <div style={S.alert("error")}>{slotError}</div>}
+            {slotSuccess && <div style={S.alert("success")}>{slotSuccess}</div>}
+
+            {/* Create Slot Form */}
+            <motion.div
+              style={{
+                ...S.card,
+                background: slotSubmitting ? "rgba(124,58,237,0.08)" : "rgba(255,255,255,0.04)",
+                border:     slotSubmitting ? "1px solid rgba(124,58,237,0.35)" : "1px solid rgba(255,255,255,0.09)",
+                transition: "background 0.3s, border 0.3s"
+              }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            >
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                ➕ Add New Time Slot
+                {slotSubmitting && (
+                  <span style={{ fontSize: "0.76rem", color: "#a78bfa", fontWeight: 600, background: "rgba(124,58,237,0.15)", padding: "0.18rem 0.6rem", borderRadius: "1rem" }}>
+                    saving…
+                  </span>
+                )}
+              </h3>
+              <form onSubmit={handleSlotSubmit}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+                  <div>
+                    <label style={S.label}>Date *</label>
+                    <input type="date" name="date" value={slotForm.date} onChange={handleSlotChange}
+                      style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
+                  </div>
+                  <div>
+                    <label style={S.label}>Start Time *</label>
+                    <input type="time" name="startTime" value={slotForm.startTime} onChange={handleSlotChange}
+                      style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
+                  </div>
+                  <div>
+                    <label style={S.label}>End Time *</label>
+                    <input type="time" name="endTime" value={slotForm.endTime} onChange={handleSlotChange}
+                      style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
+                  </div>
+                </div>
+                <p style={{ color: "#94a3b8", fontSize: "0.82rem", marginBottom: "1rem" }}>
+                  💡 Auto-generates 60-minute slots between start and end times
+                </p>
+                <button type="submit" disabled={slotSubmitting}
+                  style={{ ...S.btn("primary"), width: "100%", padding: "0.75rem", opacity: slotSubmitting ? 0.7 : 1, cursor: slotSubmitting ? "not-allowed" : "pointer" }}>
+                  {slotSubmitting ? "⏳ Creating slots…" : "✨ Create Slots"}
+                </button>
+              </form>
+            </motion.div>
+
+            {/* Slots list */}
+            <div style={{ marginTop: "1.5rem" }}>
+
+              {/* Header: title + select-all + bulk-delete toolbar */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+                  📆 Your Slots
+                  {slots.length > 0 && (
+                    <span style={{ marginLeft: "0.5rem", fontSize: "0.78rem", color: "#475569", fontWeight: 500 }}>
+                      ({slots.filter(s => !s._optimistic).length} total · {availableSlots.length} available)
+                    </span>
+                  )}
+                </h3>
+
+                {availableSlots.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                    {/* Select all checkbox */}
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.85rem", color: "#94a3b8", userSelect: "none" }}>
+                      <input type="checkbox" checked={allAvailableSelected} onChange={toggleSelectAll}
+                        style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#7c3aed" }} />
+                      Select all
+                    </label>
+
+                    {/* Bulk delete button — appears when ≥1 selected */}
+                    {selectedSlots.size > 0 && (
+                      <motion.button
+                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                        onClick={handleBulkDelete} disabled={bulkDeleting}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "0.35rem",
+                          padding: "0.4rem 0.9rem", borderRadius: "0.55rem",
+                          border: "1px solid rgba(239,68,68,0.45)", background: "rgba(239,68,68,0.12)",
+                          color: "#f87171", fontWeight: 700, fontSize: "0.82rem",
+                          cursor: bulkDeleting ? "not-allowed" : "pointer", opacity: bulkDeleting ? 0.6 : 1,
+                          transition: "opacity 0.2s"
+                        }}
+                      >
+                        {bulkDeleting ? "⏳ Deleting…" : `🗑️ Delete (${selectedSlots.size})`}
+                      </motion.button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {slotsLoading ? (
+                <div style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>⏳ Loading slots…</div>
+              ) : slots.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#64748b", padding: "3rem 0" }}>
+                  <div style={{ fontSize: "2.5rem" }}>📭</div>
+                  <p style={{ marginTop: "0.75rem" }}>No slots yet. Create your first slot above!</p>
+                </div>
+              ) : (
+                <div style={S.slotGrid}>
+                  {slots.map(slot => {
+                    const isOpt      = !!slot._optimistic;
+                    const isAvail    = slot.status === "available" && !isOpt;
+                    const isSelected = selectedSlots.has(slot._id);
+                    return (
+                      <motion.div
+                        key={slot._id}
+                        layout
+                        style={{
+                          ...S.card,
+                          border:     isOpt      ? "1px solid rgba(124,58,237,0.4)"
+                                    : isSelected ? "1px solid rgba(239,68,68,0.5)"
+                                    :              "1px solid rgba(255,255,255,0.09)",
+                          background: isOpt      ? "rgba(124,58,237,0.07)"
+                                    : isSelected ? "rgba(239,68,68,0.07)"
+                                    :              "rgba(255,255,255,0.04)",
+                          opacity: isOpt ? 0.6 : 1,
+                          position: "relative",
+                          marginBottom: 0,
+                          transition: "border 0.2s, background 0.2s, opacity 0.2s"
+                        }}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: isOpt ? 0.6 : 1, scale: 1 }}
+                      >
+                        {/* Per-card checkbox (available only) */}
+                        {isAvail && (
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelectSlot(slot._id)}
+                            style={{ position: "absolute", top: "0.9rem", right: "0.9rem", width: 16, height: 16, cursor: "pointer", accentColor: "#ef4444" }} />
+                        )}
+
+                        <div style={{ paddingRight: isAvail ? "1.6rem" : 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.92rem", marginBottom: "0.2rem" }}>
+                            {isOpt ? "⏳ " : "📅 "}{formatSlotDateTime(slot.startTime)}
+                          </div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.8rem", marginBottom: "0.65rem" }}>
+                            → {new Date(slot.endTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                          <span style={{ ...S.slotBadge(slot.status), ...(isOpt ? { background: "rgba(124,58,237,0.2)", color: "#c4b5fd" } : {}) }}>
+                            {isOpt ? "saving…" : slot.status}
+                          </span>
+                        </div>
+
+                        {isAvail && !isSelected && (
+                          <button onClick={() => handleDeleteSlot(slot._id)}
+                            style={{ ...S.btn("danger"), width: "100%", marginTop: "0.65rem", fontSize: "0.8rem" }}>
+                            🗑️ Delete
+                          </button>
+                        )}
+                        {isAvail && isSelected && (
+                          <div style={{ textAlign: "center", fontSize: "0.78rem", color: "#f87171", marginTop: "0.5rem", padding: "0.35rem", background: "rgba(239,68,68,0.09)", borderRadius: "0.4rem" }}>
+                            ✓ Marked for deletion
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </>
         )}
 

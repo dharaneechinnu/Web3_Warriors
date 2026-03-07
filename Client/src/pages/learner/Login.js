@@ -114,6 +114,19 @@ function LoginLearner() {
       const data = await response.json();
       
       if (response.ok && data) {
+        // ── Role guard: only learner accounts may use this portal ──
+        const userRole = data.user?.role;
+        if (userRole !== 'learner') {
+          if (userRole === 'mentor') {
+            setError('This account is a mentor account. Please use the mentor login portal.');
+          } else if (userRole === 'admin') {
+            setError('Admin accounts cannot log in here. Please use the admin portal.');
+          } else {
+            setError('Access denied. This portal is for learners only.');
+          }
+          return;
+        }
+
         // Use AuthContext login method
         const loginResult = login(data);
         

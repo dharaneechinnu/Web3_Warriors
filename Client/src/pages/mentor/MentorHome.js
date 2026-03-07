@@ -838,42 +838,6 @@ const MentorHome = () => {
           <SectionTitle>⚡ Mentor Tools</SectionTitle>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
             <button
-             onClick={() => verificationStatus === 'approved' ? navigate('/mentor/sessions') : navigate('/mentor/application-status')}
-              style={{
-                background: verificationStatus === 'approved'
-                  ? 'linear-gradient(135deg, #f97316, #ef4444)'
-                  : 'rgba(100,116,139,0.2)',
-                color: verificationStatus === 'approved' ? 'white' : '#64748b',
-                border: verificationStatus === 'approved' ? 'none' : '1px solid rgba(100,116,139,0.3)',
-                borderRadius: '0.75rem',
-                padding: '1rem 2rem',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                flex: '1 1 200px',
-              }}
-               title={verificationStatus !== 'approved' ? 'Get verified first to manage sessions' : ''}
-            
-            >
-              🕐 Manage Time Slots
-            </button>
-            <button
-              onClick={() => navigate('/mentor/slots')}
-              style={{
-                background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.75rem',
-                padding: '1rem 2rem',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                cursor: verificationStatus === 'approved' ? 'pointer' : 'not-allowed',
-                flex: '1 1 200px',
-              }}
-            >
-              🕐 Manage Time Slots
-            </button>
-            <button
               onClick={() => verificationStatus === 'approved' ? navigate('/mentor/sessions') : navigate('/mentor/application-status')}
               style={{
                 background: verificationStatus === 'approved'

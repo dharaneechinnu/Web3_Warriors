@@ -114,6 +114,13 @@ function LoginMentor() {
       const data = await response.json();
       
       if (response.ok && data) {
+        // ── Role guard: only mentor or admin may use this portal ──
+        const userRole = data.user?.role;
+        if (userRole !== 'mentor' && userRole !== 'admin') {
+          setError('Access denied. This portal is for mentors only. Please use the learner login.');
+          return;
+        }
+
         // Use AuthContext login method
         const loginResult = login(data);
         

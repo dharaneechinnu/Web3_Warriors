@@ -54,8 +54,8 @@ export default function MentorSlotManagement() {
   const mentorId = uid();
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    startTime: "06:00",
-    endTime: "08:00"
+    startTime: "09:00",
+    endTime: "10:00"
   });
 
   const [slots, setSlots] = useState([]);
@@ -107,8 +107,8 @@ export default function MentorSlotManagement() {
         setSuccess(`✅ ${res.data.message}`);
         setFormData({
           date: new Date().toISOString().split('T')[0],
-          startTime: "06:00",
-          endTime: "08:00"
+          startTime: "09:00",
+          endTime: "10:00"
         });
         setTimeout(() => {
           setSuccess(null);
