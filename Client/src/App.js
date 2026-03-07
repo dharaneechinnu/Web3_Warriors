@@ -39,6 +39,8 @@ import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
 import MentorMyCourses from './pages/mentor/MentorMyCourses';
 import MentorSlotManagement from './pages/mentor/MentorSlotManagement';
 import BookSession from './pages/learner/BookSession';
+import MyCertificates from './pages/learner/MyCertificates';
+import CertificateVerify from './pages/learner/CertificateVerify';
 import VideoRoom from './pages/VideoRoom';
 
 // Mentor application pages
@@ -283,6 +285,14 @@ function AppRoutes() {
         <Route path="/sessions" element={
           <ProtectedRoute><BookSession /></ProtectedRoute>
         } />
+
+        {/* Learner certificates */}
+        <Route path="/learner/certificates" element={
+          <LearnerRoute><MyCertificates /></LearnerRoute>
+        } />
+
+        {/* Public certificate verification — no auth required */}
+        <Route path="/certificate/:certificateId" element={<CertificateVerify />} />
 
         {/* WebRTC Video Room — fullscreen, no Navbar */}
         <Route path="/room/:roomId" element={

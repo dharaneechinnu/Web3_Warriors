@@ -425,7 +425,7 @@ const LearnerHome = () => {
       ] = await Promise.allSettled([
         api.get(`/courses/enrolled/${userId}`).catch(() => ({ data: [] })),
         api.get('/courses/getall').catch(() => ({ data: [] })),
-        api.get(`/credentials/${userId}`).catch(() => ({ data: [] })),
+        api.get(`/courses/certificate/user/${userId}`).catch(() => ({ data: { certificates: [] } })),
         api.get(`/token-activities/${userId}`).catch(() => ({ data: [] })),
         api.get(`/notifications/${userId}`).catch(() => ({ data: [] }))
       ]);
@@ -463,18 +463,23 @@ const LearnerHome = () => {
         level: course.level
       }));
 
-      // Process credentials
-      const credentials = credentialsRes.status === 'fulfilled' ? 
-        (Array.isArray(credentialsRes.value.data) ? credentialsRes.value.data : []) : [];
-      
+      // Process credentials (real certificates from CertificationModel)
+      const certsData = credentialsRes.status === 'fulfilled'
+        ? (credentialsRes.value.data.certificates || credentialsRes.value.data || [])
+        : [];
+      const credentials = Array.isArray(certsData) ? certsData : [];
+
       const recentCredentials = credentials
         .slice(0, 3)
-        .map(cred => ({
-          id: cred._id || cred.id,
-          skillName: cred.skillName || cred.skill || cred.title || 'Unknown Skill',
-          issueDate: cred.issueDate || cred.createdAt ? 
-            new Date(cred.issueDate || cred.createdAt).toISOString().split('T')[0] : 
-            new Date().toISOString().split('T')[0]
+        .map(cert => ({
+          id: cert.certificateId || cert._id,
+          certId: cert.certificateId,
+          skillName: cert.courseName || 'Course Certificate',
+          mentorName: cert.mentorName || 'Instructor',
+          issueDate: cert.completedDate
+            ? new Date(cert.completedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+            : new Date().toLocaleDateString(),
+          grade: cert.grade || 'Pass'
         }));
 
       // Process token activities
@@ -576,12 +581,16 @@ const LearnerHome = () => {
   };
 
   const handleViewCredential = (credentialId) => {
-    navigate(`/credential/${credentialId}`);
+    navigate(`/certificate/${credentialId}`);
   };
 
   const handleShareCredential = (credentialId) => {
-    // Implement share functionality
-    alert(`Share credential ${credentialId}`);
+    const url = `${window.location.origin}/certificate/${credentialId}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => alert('Verification link copied!'));
+    } else {
+      alert(`Verification URL: ${url}`);
+    }
   };
 
   if (loading) {
@@ -731,29 +740,39 @@ const LearnerHome = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.7 }}
         >
-          <SectionTitle>🏆 Recent Credentials</SectionTitle>
+          <SectionTitle>🏆 Recent Certificates</SectionTitle>
           {learnerData.recentCredentials.length > 0 ? (
-            learnerData.recentCredentials.map((credential, index) => (
-              <CredentialCard
-                key={credential.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
-                <CredentialTitle>{credential.skillName}</CredentialTitle>
-                <CredentialDate>📅 Issued on {credential.issueDate}</CredentialDate>
-                <CredentialButtons>
-                  <SmallButton onClick={() => handleViewCredential(credential.id)}>
-                    View Credential
-                  </SmallButton>
-                  <SmallButton secondary onClick={() => handleShareCredential(credential.id)}>
-                    Share / Verify
-                  </SmallButton>
-                </CredentialButtons>
-              </CredentialCard>
-            ))
+            <>
+              {learnerData.recentCredentials.map((credential, index) => (
+                <CredentialCard
+                  key={credential.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.1 }}
+                >
+                  <CredentialTitle>{credential.skillName}</CredentialTitle>
+                  <CredentialDate>👨‍🏫 {credential.mentorName} &nbsp;·&nbsp; 📅 {credential.issueDate} &nbsp;·&nbsp; Grade: <strong>{credential.grade}</strong></CredentialDate>
+                  <CredentialButtons>
+                    <SmallButton onClick={() => handleViewCredential(credential.certId || credential.id)}>
+                      👁 View &amp; Verify
+                    </SmallButton>
+                    <SmallButton secondary onClick={() => handleShareCredential(credential.certId || credential.id)}>
+                      🔗 Share
+                    </SmallButton>
+                  </CredentialButtons>
+                </CredentialCard>
+              ))}
+              <Button style={{ marginTop: '0.75rem' }} onClick={() => navigate('/learner/certificates')}>
+                🏆 View All Certificates
+              </Button>
+            </>
           ) : (
-            <EmptyState>No credentials earned yet. Complete courses to earn credentials!</EmptyState>
+            <>
+              <EmptyState>No certificates yet. Complete any enrolled course to earn one!</EmptyState>
+              <Button style={{ marginTop: '1rem' }} onClick={() => navigate('/learner-dashboard')}>
+                📚 Browse My Courses
+              </Button>
+            </>
           )}
         </Section>
 

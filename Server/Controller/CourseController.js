@@ -3043,18 +3043,52 @@ exports.generateCertificate = async (req, res) => {
     }
 };
 
-// Get certificate by ID (for verification)
+// Get certificate by ID (for public verification)
 exports.getCertificate = async (req, res) => {
     try {
         const { certificateId } = req.params;
         const cert = await CertificationModel.findOne({ certificateId })
-            .populate('userId', 'fullName userName email')
-            .populate('courseId', 'title')
-            .populate('mentorId', 'fullName userName email');
+            .populate('userId', 'name email')
+            .populate('courseId', 'title thumbnail')
+            .populate('mentorId', 'name email');
 
         if (!cert) return res.status(404).json({ success: false, message: 'Certificate not found' });
 
-        res.json({ success: true, certificate: cert });
+        const learnerName = cert.userId?.name || cert.userId?.email || 'Learner';
+
+        res.json({
+            success: true,
+            certificate: {
+                ...cert.toObject(),
+                learnerName
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Get all certificates for a learner
+exports.getUserCertificates = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId).select('name email');
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        const certs = await CertificationModel.find({ userId })
+            .populate('courseId', 'title thumbnail')
+            .sort({ completedDate: -1 })
+            .lean();
+
+        const learnerName = user.name || user.email || 'Learner';
+
+        res.json({
+            success: true,
+            certificates: certs.map(c => ({
+                ...c,
+                learnerName
+            }))
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

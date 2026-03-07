@@ -19,7 +19,7 @@ import {
   FaPlayCircle
 } from 'react-icons/fa';
 import api from '../../services/api';
-import { API_BASE_URL } from '../../config';
+import { API_BASE_URL, assetUrl } from '../../config';
 import LectureVideoPlayer from '../../components/LectureVideoPlayer';
 import { downloadCertificate } from '../../utils/certificateGenerator';
 
@@ -2690,7 +2690,8 @@ const LearnerCourseView = () => {
                   })}
                   
                   <LectureVideoPlayer
-                    videoUrl={currentLecture.videoUrl}
+                    key={currentLecture._id}
+                    videoUrl={assetUrl(currentLecture.videoUrl)}
                     onPlay={handleVideoPlay}
                     onPause={handleVideoPause}
                     onTimeUpdate={handleVideoTimeUpdate}

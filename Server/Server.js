@@ -203,21 +203,67 @@ app.use(
         res.setHeader("Content-Type", `image/${ext.replace(".", "")}`);
       }
 
-      /*
-      ----------------------------------------
-      CORS HEADERS FOR VIDEO STREAMING
-      ----------------------------------------
-      */
-      res.setHeader("Access-Control-Allow-Origin", "https://ardk.online");
-      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Range");
-      res.setHeader(
-        "Access-Control-Expose-Headers",
-        "Content-Length, Content-Range, Accept-Ranges"
-      );
+      // NOTE: CORS is handled by the global cors() middleware above.
+      // Do NOT set Access-Control-Allow-Origin here — it would override the
+      // request-origin–aware header the global middleware already set and would
+      // break requests from localhost:3000 during development.
     }
   })
 );
+// ── Video fallback: handle stale upload timestamps ────────────────────────────
+// When a lecture video URL is stored in the DB with a timestamp that no longer
+// matches the file on disk (e.g. after a re-upload), express.static() above
+// will call next() without serving anything.  This middleware intercepts those
+// requests for /uploads/courses/videos/*.  It extracts the *original filename*
+// portion (everything after the 3rd "-" separator, e.g. "Claude_CLI_Setup.mp4")
+// and looks for any file in the videos directory that ends with that name.
+// If exactly one match is found it is served; otherwise a clear 404 is returned.
+app.get('/uploads/courses/videos/:filename', (req, res, next) => {
+  const requested = req.params.filename;
+  const videosDir = path.join(__dirname, 'uploads', 'courses', 'videos');
+
+  // Extract the original filename: pattern is lecture_video-<ts>-<rnd>-<originalname>
+  // Split on '-' and drop the first three segments (lecture_video, ts, rnd).
+  const parts = requested.split('-');
+  const originalName = parts.length >= 4 ? parts.slice(3).join('-') : null;
+
+  if (!originalName) return next(); // unexpected format – let static or 404 handle it
+
+  // Check whether the exact file exists first (shouldn't reach here if it did,
+  // but guards against double-invocation).
+  const exactPath = path.join(videosDir, requested);
+  if (fs.existsSync(exactPath)) {
+    return res.sendFile(exactPath);
+  }
+
+  // Scan the directory for a file whose name ends with the original filename.
+  let candidates;
+  try {
+    candidates = fs.readdirSync(videosDir).filter(f => f.endsWith('-' + originalName));
+  } catch (_) {
+    return next();
+  }
+
+  if (candidates.length === 0) {
+    console.warn(`📹 VIDEO FALLBACK: No match for original name "${originalName}" in videos directory`);
+    return res.status(404).json({ error: `Video file not found: ${requested}` });
+  }
+
+  // Prefer the most recent file if multiple matches (highest timestamp prefix).
+  candidates.sort((a, b) => {
+    const tsA = parseInt(a.split('-')[1] || '0', 10);
+    const tsB = parseInt(b.split('-')[1] || '0', 10);
+    return tsB - tsA;
+  });
+
+  const best = candidates[0];
+  console.log(`📹 VIDEO FALLBACK: Serving "${best}" instead of stale "${requested}"`);
+
+  const servePath = path.join(videosDir, best);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', 'video/mp4');
+  res.sendFile(servePath);
+});
 // Serve test pages from public directory
 app.use("/test", express.static(path.join(__dirname, "public")));
 

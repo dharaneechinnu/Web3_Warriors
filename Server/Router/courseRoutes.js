@@ -118,5 +118,6 @@ router.get("/learner-progress/:courseId", courseController.getMentorLearnerProgr
 // ============================================================
 router.post("/certificate/generate/:courseId/:userId", courseController.generateCertificate);
 router.get("/certificate/verify/:certificateId", courseController.getCertificate);
+router.get("/certificate/user/:userId", courseController.getUserCertificates);
 
 module.exports = router;

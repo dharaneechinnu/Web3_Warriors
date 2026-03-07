@@ -7,7 +7,8 @@ import {
   FaGraduationCap, 
   FaChalkboardTeacher, 
   FaBookOpen,
-  FaArrowRight 
+  FaArrowRight,
+  FaAward 
 } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -120,6 +121,13 @@ const UdemyStyleQuickActions = ({ verificationStatus }) => {
       description: 'Continue with your enrolled courses and track your progress.',
       action: () => navigate('/learner-home'),
       buttonText: 'Continue Learning'
+    },
+    {
+      icon: <FaAward />,
+      title: 'My Certificates',
+      description: 'View, download and share your earned certificates of completion.',
+      action: () => navigate('/learner/certificates'),
+      buttonText: 'View Certificates'
     }
   ];
 
