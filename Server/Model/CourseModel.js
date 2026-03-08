@@ -126,7 +126,7 @@ const SectionSchema = new mongoose.Schema({
 // Main Course Schema
 const CourseSchema = new mongoose.Schema({
     // Mentor Information
-    mentorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    mentorId: { type: mongoose.Schema.Types.ObjectId, ref: "UsersLogins", required: true },
     mentorName: { type: String, required: true },
     mentorEmail: { type: String, required: true },
     
@@ -181,7 +181,7 @@ const CourseSchema = new mongoose.Schema({
     publishedAt: { type: Date },
     
     // Enrollment
-    enrolledLearners: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    enrolledLearners: [{ type: mongoose.Schema.Types.ObjectId, ref: "UsersLogins" }],
     enrollmentCount: { type: Number, default: 0 },
     
     // Ratings

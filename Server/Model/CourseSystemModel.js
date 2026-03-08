@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const UdemyCourseSchema = new mongoose.Schema({
   mentorId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    ref: 'UsersLogins', 
     required: true 
   },
   title: { 
@@ -99,7 +99,7 @@ const UdemyCourseSchema = new mongoose.Schema({
 
   // Quiz results
   quizResults: [{
-    learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'UsersLogins' },
     lectureId: mongoose.Schema.Types.ObjectId,
     answers: mongoose.Schema.Types.Mixed,
     score: Number,
@@ -110,7 +110,7 @@ const UdemyCourseSchema = new mongoose.Schema({
   }],
   // Assignment submissions
   assignmentSubmissions: [{
-    learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    learnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'UsersLogins' },
     lectureId: mongoose.Schema.Types.ObjectId,
     fileName: String,
     filePath: String,
@@ -121,7 +121,7 @@ const UdemyCourseSchema = new mongoose.Schema({
     grade: Number,
     feedback: String,
     gradedAt: Date,
-    gradedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    gradedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'UsersLogins' }
   }],
 
   enrolledAt: { type: Date, default: Date.now },
@@ -249,7 +249,7 @@ const CourseLectureSchema = new mongoose.Schema({
 const AssignmentSubmissionSchema = new mongoose.Schema({
   studentId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    ref: 'UsersLogins', 
     required: true 
   },
   lectureId: { 
@@ -282,12 +282,12 @@ const AssignmentSubmissionSchema = new mongoose.Schema({
   gradedAt: Date,
   gradedBy: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User'
+    ref: 'UsersLogins'
   },
   evaluatedAt: Date,
   evaluatedBy: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User'
+    ref: 'UsersLogins'
   }
 });
 
@@ -324,7 +324,7 @@ const QuizSchema = new mongoose.Schema({
 const CourseEnrollmentSchema = new mongoose.Schema({
   studentId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    ref: 'UsersLogins', 
     required: true 
   },
   courseId: { 
@@ -348,7 +348,7 @@ const CourseEnrollmentSchema = new mongoose.Schema({
 const CourseBookmarkSchema = new mongoose.Schema({
   studentId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    ref: 'UsersLogins', 
     required: true 
   },
   courseId: { 

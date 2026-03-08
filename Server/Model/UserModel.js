@@ -65,7 +65,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  coursesEnrolled: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
+  coursesEnrolled: [{ type: mongoose.Schema.Types.ObjectId, ref: "OriginalCourse" }],
   tokenBalance: {
     type: Number,
     default: 10,
@@ -114,7 +114,7 @@ const userSchema = new mongoose.Schema({
   
   // Video progress tracking for learners
   lectureProgress: [{
-    courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: "OriginalCourse", required: true },
     lectureId: { type: String, required: true },
     sectionId: { type: String },
     currentTime: { type: Number, default: 0 }, // Last watched position in seconds
