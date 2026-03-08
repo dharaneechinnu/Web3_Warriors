@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const MentorshipRequestSchema = new mongoose.Schema({
     mentorId: { 
         type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
+        ref: 'UsersLogins', 
         required: true 
     },
     learnerId: { 
         type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
+        ref: 'UsersLogins', 
         required: true 
     },
     slotId: { 

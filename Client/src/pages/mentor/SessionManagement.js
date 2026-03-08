@@ -141,13 +141,13 @@ const SessionManagement = () => {
     setSlotForm(prev => ({ ...prev, [name]: value }));
   };
 
+  /* Parse a date+time string as IST (Asia/Kolkata, UTC+5:30) */
+  const parseIST = (date, time) => new Date(`${date}T${time}:00+05:30`);
+
   /* Build optimistic slot preview cards client-side so they appear instantly */
   const computeOptimisticSlots = (date, startTime, endTime) => {
-    const [sy, sm, sd] = date.split('-').map(Number);
-    const [sh, smin]   = startTime.split(':').map(Number);
-    const [eh, emin]   = endTime.split(':').map(Number);
-    let cursor = new Date(sy, sm - 1, sd, sh, smin, 0);
-    const end  = new Date(sy, sm - 1, sd, eh, emin, 0);
+    let cursor = parseIST(date, startTime);
+    const end  = parseIST(date, endTime);
     const out  = [];
     while (cursor < end) {
       const slotEnd = new Date(cursor.getTime() + 60 * 60000);
@@ -233,8 +233,10 @@ const SessionManagement = () => {
 
   const formatSlotDateTime = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+    return date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "short" });
   };
+
+  const fmtISTTime = (dateStr) => new Date(dateStr).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
 
   useEffect(() => {
     // Check verification status before loading sessions
@@ -623,6 +625,25 @@ const SessionManagement = () => {
                   </span>
                 )}
               </h3>
+              {/* Quick-pick time ranges */}
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                {[
+                  { label: "🌅 Morning", start: "09:00", end: "12:00" },
+                  { label: "☀️ Afternoon", start: "13:00", end: "17:00" },
+                  { label: "🌆 Evening", start: "18:00", end: "21:00" },
+                ].map(({ label, start, end }) => (
+                  <button key={label} type="button"
+                    onClick={() => setSlotForm(f => ({ ...f, startTime: start, endTime: end }))}
+                    style={{
+                      padding: "0.3rem 0.85rem", borderRadius: "2rem", border: "1px solid rgba(124,58,237,0.35)",
+                      background: slotForm.startTime === start && slotForm.endTime === end
+                        ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)",
+                      color: "#c4b5fd", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer"
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <form onSubmit={handleSlotSubmit}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
                   <div>
@@ -631,19 +652,37 @@ const SessionManagement = () => {
                       style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
                   </div>
                   <div>
-                    <label style={S.label}>Start Time *</label>
+                    <label style={S.label}>Start Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                     <input type="time" name="startTime" value={slotForm.startTime} onChange={handleSlotChange}
                       style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
                   </div>
                   <div>
-                    <label style={S.label}>End Time *</label>
+                    <label style={S.label}>End Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                     <input type="time" name="endTime" value={slotForm.endTime} onChange={handleSlotChange}
                       style={{ ...S.input, opacity: slotSubmitting ? 0.5 : 1 }} disabled={slotSubmitting} required />
                   </div>
                 </div>
-                <p style={{ color: "#94a3b8", fontSize: "0.82rem", marginBottom: "1rem" }}>
-                  💡 Auto-generates 60-minute slots between start and end times
-                </p>
+                {/* Slot preview */}
+                {(() => {
+                  const preview = computeOptimisticSlots(slotForm.date, slotForm.startTime, slotForm.endTime);
+                  if (!preview.length) return null;
+                  return (
+                    <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "0.6rem", padding: "0.75rem 1rem", marginBottom: "1rem" }}>
+                      <div style={{ fontSize: "0.82rem", color: "#86efac", fontWeight: 700, marginBottom: "0.4rem" }}>
+                        ✅ Will create {preview.length} slot{preview.length > 1 ? "s" : ""} (1 hour each, IST):
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                        {preview.map((s, i) => (
+                          <span key={i} style={{ fontSize: "0.78rem", background: "rgba(34,197,94,0.12)", color: "#4ade80", padding: "0.2rem 0.6rem", borderRadius: "1rem" }}>
+                            {new Date(s.startTime).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                            {" – "}
+                            {new Date(s.endTime).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <button type="submit" disabled={slotSubmitting}
                   style={{ ...S.btn("primary"), width: "100%", padding: "0.75rem", opacity: slotSubmitting ? 0.7 : 1, cursor: slotSubmitting ? "not-allowed" : "pointer" }}>
                   {slotSubmitting ? "⏳ Creating slots…" : "✨ Create Slots"}
@@ -739,7 +778,7 @@ const SessionManagement = () => {
                             {isOpt ? "⏳ " : "📅 "}{formatSlotDateTime(slot.startTime)}
                           </div>
                           <div style={{ color: "#94a3b8", fontSize: "0.8rem", marginBottom: "0.65rem" }}>
-                            → {new Date(slot.endTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                            → {fmtISTTime(slot.endTime)}
                           </div>
                           <span style={{ ...S.slotBadge(slot.status), ...(isOpt ? { background: "rgba(124,58,237,0.2)", color: "#c4b5fd" } : {}) }}>
                             {isOpt ? "saving…" : slot.status}

@@ -2,19 +2,42 @@ const MentorSlot = require('../Model/MentorSlotModel');
 const MentorAvailability = require('../Model/MentorAvailabilityModel');
 const User = require('../Model/UserModel');
 
+// Helper: Validate that slot date/time is in the future
+const validateFutureSlot = (date, startTime) => {
+    // Parse provided date and time as IST
+    const slotDateTime = parseIST(date, startTime);
+    
+    // Get current time in IST
+    const now = new Date();
+    
+    console.log(`[validateFutureSlot] Slot: ${slotDateTime.toISOString()}, Now: ${now.toISOString()}`);
+    
+    // Check if slot start time is in the past
+    if (slotDateTime <= now) {
+        const dateStr = new Date(slotDateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short' });
+        const timeStr = new Date(slotDateTime).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', timeStyle: 'short' });
+        
+        return {
+            valid: false,
+            message: `Cannot create slots for past date/time (${dateStr} ${timeStr} IST). Please select a future date and time.`
+        };
+    }
+    
+    return { valid: true, message: "" };
+};
+
+// Helper: parse a "YYYY-MM-DD" + "HH:MM" pair as IST (Asia/Kolkata, UTC+5:30)
+// so that a mentor entering "09:00" gets 09:00 IST stored, not 09:00 UTC.
+const parseIST = (date, time) => new Date(`${date}T${time}:00+05:30`);
+
 // Helper: Generate 60-minute slots from start to end time
-// Uses Date.UTC() to parse the date portion so the server's local timezone
-// never shifts the date (e.g., "2026-03-09" + UTC midnight is always March 9).
-// Hours are then applied as UTC offsets to match the same wall-clock intent.
+// Parses input times as IST so the stored UTC value correctly reflects
+// what the mentor sees on their clock.
 const generateSlots = (date, startTime, endTime, mentorId) => {
     const slots = [];
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin]     = endTime.split(':').map(Number);
-    const [year, month, day]    = date.split('-').map(Number);
 
-    // Build timestamps entirely in UTC so the date never drifts
-    let cursor      = new Date(Date.UTC(year, month - 1, day, startHour, startMin, 0, 0));
-    const endMs     = new Date(Date.UTC(year, month - 1, day, endHour,   endMin,   0, 0)).getTime();
+    let cursor  = parseIST(date, startTime);
+    const endMs = parseIST(date, endTime).getTime();
 
     while (cursor.getTime() < endMs) {
         const slotEnd = new Date(cursor.getTime() + 60 * 60000); // +1 hour
@@ -62,6 +85,16 @@ exports.createSlots = async (req, res) => {
             });
         }
 
+        // CRITICAL: Validate that slot is for future date/time (server-side)
+        const futureValidation = validateFutureSlot(date, startTime);
+        if (!futureValidation.valid) {
+            console.log(`[createSlots] Validation failed: ${futureValidation.message}`);
+            return res.status(400).json({
+                success: false,
+                message: futureValidation.message
+            });
+        }
+
         // Generate slots (60 minutes each)
         const slots = generateSlots(date, startTime, endTime, mentorId);
 
@@ -74,6 +107,7 @@ exports.createSlots = async (req, res) => {
 
         // Insert slots into database
         const createdSlots = await MentorSlot.insertMany(slots);
+        console.log(`[createSlots] Created ${createdSlots.length} slots for mentor ${mentorId}`);
 
         res.status(201).json({
             success: true,
@@ -81,6 +115,7 @@ exports.createSlots = async (req, res) => {
             slots: createdSlots
         });
     } catch (error) {
+        console.error('[createSlots] error:', error);
         res.status(500).json({
             success: false,
             message: error.message
@@ -89,6 +124,7 @@ exports.createSlots = async (req, res) => {
 };
 
 // ── GET AVAILABLE SLOTS FOR A MENTOR ────────────────────────────────────────────
+// IMPORTANT: Only returns slots where endTime > current time (no expired slots)
 exports.getAvailableSlots = async (req, res) => {
     try {
         const { mentorId } = req.params;
@@ -105,14 +141,22 @@ exports.getAvailableSlots = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Mentor not found' });
         }
 
-        const filter = { mentorId, status: 'available' };
+        // Get current time in server (ISO format)
+        const now = new Date();
+        console.log(`[getAvailableSlots] Filtering slots for time ${now.toISOString()}`);
+
+        const filter = { 
+            mentorId, 
+            status: 'available',
+            // CRITICAL: Only show slots where endTime > now (exclude expired slots)
+            endTime: { $gt: now }
+        };
 
         if (date) {
-            // Filter for a specific date — use Date.UTC to avoid local-TZ drift
-            const [y, m, d] = date.split('-').map(Number);
+            // Filter for a specific IST date — use IST midnight to IST 23:59
             filter.startTime = {
-                $gte: new Date(Date.UTC(y, m - 1, d,  0,  0,  0,   0)),
-                $lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+                $gte: parseIST(date, '00:00'),
+                $lte: new Date(parseIST(date, '23:59').getTime() + 59000)
             };
         } else {
             // Use start of today (UTC midnight) so slots created for today
@@ -129,6 +173,8 @@ exports.getAvailableSlots = async (req, res) => {
 
         const slots = await MentorSlot.find(filter).sort({ startTime: 1 }).lean();
 
+        console.log(`[getAvailableSlots] Found ${slots.length} non-expired slots for mentor ${mentorId}`);
+
         res.json({
             success: true,
             count: slots.length,
@@ -139,7 +185,8 @@ exports.getAvailableSlots = async (req, res) => {
                 endTime:     toIST(slot.endTime,   { hour: '2-digit', minute: '2-digit', hour12: true }),
                 displayText: toIST(slot.startTime, { dateStyle: 'medium', timeStyle: 'short' }),
                 startTimeRaw: slot.startTime,
-                endTimeRaw:   slot.endTime
+                endTimeRaw:   slot.endTime,
+                isExpired: slot.endTime <= now
             }))
         });
     } catch (error) {
@@ -197,6 +244,7 @@ exports.bookSlot = async (req, res) => {
 };
 
 // ── GET ALL SLOTS FOR A MENTOR ──────────────────────────────────────────────────
+// Returns ALL slots (including expired) with status indicator - FOR MENTOR DASHBOARD
 exports.getMentorSlots = async (req, res) => {
     try {
         const { mentorId } = req.params;
@@ -210,15 +258,54 @@ exports.getMentorSlots = async (req, res) => {
             });
         }
 
-        // Fetch all slots for this mentor
+        // Fetch all slots for this mentor (including expired)
         const slots = await MentorSlot.find({ mentorId })
             .sort({ startTime: -1 });
 
+        // Get current time for expiration checking
+        const now = new Date();
+
+        // Add expiration status to each slot for frontend display
+        const slotsWithStatus = slots.map(slot => ({
+            ...slot.toObject(),
+            isExpired: slot.endTime <= now,
+            displayStatus: slot.endTime <= now ? 'expired' : slot.status
+        }));
+
         res.json({
             success: true,
-            slots
+            count: slots.length,
+            slots: slotsWithStatus
         });
     } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// ── CLEANUP EXPIRED SLOTS ──────────────────────────────────────────────────────
+// OPTIONAL: Can be called manually or via cron job to clean up database
+// Permanently deletes slots where endTime has passed
+exports.cleanupExpiredSlots = async (req, res) => {
+    try {
+        const now = new Date();
+        
+        // Delete all slots where endTime <= now
+        const result = await MentorSlot.deleteMany({
+            endTime: { $lte: now }
+        });
+
+        console.log(`[cleanupExpiredSlots] Deleted ${result.deletedCount} expired slots at ${now.toISOString()}`);
+
+        res.json({
+            success: true,
+            message: `Cleaned up ${result.deletedCount} expired slots`,
+            deletedCount: result.deletedCount
+        });
+    } catch (error) {
+        console.error('[cleanupExpiredSlots] error:', error);
         res.status(500).json({
             success: false,
             message: error.message

@@ -4,6 +4,7 @@ const Session = require('../Model/SessionModel');
 const User = require('../Model/UserModel');
 const { v4: uuidv4 } = require('uuid');
 const emailService = require('../services/emailService');
+const notifService = require('../services/notificationService');
 
 let io = null;
 exports.setIO = (socketIO) => { io = socketIO; };
@@ -88,6 +89,16 @@ exports.sendMentorshipRequest = async (req, res) => {
             });
         }
 
+        // Persist in-app notification for mentor
+        const mentorUserId = slot.mentorId._id || slot.mentorId;
+        await notifService.createNotification({
+            userId: mentorUserId,
+            type: 'booking_request',
+            title: '📩 New Session Request',
+            message: `${learner.name} wants to book a session on "${topic}"`,
+            metadata: { requestId: request._id, learnerId, topic }
+        }, io);
+
         // Send email to mentor
         const mentor = await User.findById(slot.mentorId);
         if (mentor?.email) {
@@ -163,7 +174,11 @@ exports.getMentorRequests = async (req, res) => {
             .populate('learnerId', 'name email profileImage')
             .populate({
                 path: 'slotId',
-                select: 'startTime endTime'
+                select: 'startTime endTime sessionId',
+                populate: {
+                    path: 'sessionId',
+                    select: 'roomId meetingLink status scheduledAt duration'
+                }
             })
             .sort({ createdAt: -1 });
 
@@ -247,6 +262,16 @@ exports.acceptMentorshipRequest = async (req, res) => {
         slot.sessionId = session._id;
         await slot.save();
 
+        // Persist in-app notification for learner
+        await notifService.createNotification({
+            userId: request.learnerId,
+            type: 'booking_accepted',
+            title: '✅ Session Confirmed!',
+            message: `${mentor.name} accepted your session request for "${request.topic}"`,
+            sessionId: session._id,
+            metadata: { sessionId: session._id, roomId, mentorName: mentor.name, topic: request.topic }
+        }, io);
+
         // Emit real-time notification to learner
         if (io) {
             io.to(`learner_${request.learnerId}`).emit('mentorship_request_accepted', {
@@ -326,6 +351,16 @@ exports.rejectMentorshipRequest = async (req, res) => {
         slot.updatedAt = new Date();
         await slot.save();
 
+        // Persist in-app notification for learner
+        const mentor = await User.findById(mentorId);
+        await notifService.createNotification({
+            userId: request.learnerId,
+            type: 'booking_rejected',
+            title: '❌ Session Request Declined',
+            message: `${mentor?.name || 'Mentor'} declined your request for "${request.topic}"${rejectReason ? ': ' + rejectReason : ''}`,
+            metadata: { requestId, reason: rejectReason, mentorName: mentor?.name, topic: request.topic }
+        }, io);
+
         // Emit real-time notification to learner
         if (io) {
             io.to(`learner_${request.learnerId}`).emit('mentorship_request_rejected', {
@@ -336,13 +371,12 @@ exports.rejectMentorshipRequest = async (req, res) => {
 
         // Send email to learner
         const learner = await User.findById(request.learnerId);
-        const mentor = await User.findById(mentorId);
         if (learner?.email) {
             try {
                 await emailService.sendBookingRejectedEmail({
                     learnerEmail: learner.email,
                     learnerName: learner.name,
-                    mentorName: mentor.name,
+                    mentorName: mentor?.name,
                     topic: request.topic,
                     reason: rejectReason
                 });

@@ -1140,6 +1140,7 @@ const LearnerCourseView = () => {
   const [videoProgress, setVideoProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [showCourseCompletionModal, setShowCourseCompletionModal] = useState(false);
   const [videoWatchedPercentage, setVideoWatchedPercentage] = useState(0);
   const [hasVideoStarted, setHasVideoStarted] = useState(false);
   const [videoCompleteThreshold] = useState(0.9); // 90% completion threshold
@@ -1662,7 +1663,7 @@ const LearnerCourseView = () => {
       if (response.data.success) {
         console.log('Course marked as complete');
         setOverallCourseProgress(100);
-        alert('🎉 Congratulations! You have completed the entire course!');
+        setShowCourseCompletionModal(true);
       }
     } catch (error) {
       console.error('Error marking course as complete:', error);
@@ -2948,6 +2949,150 @@ const LearnerCourseView = () => {
 
         {/* Right Sidebar removed — layout simplified to two columns */}
       </MainContent>
+
+      {/* Course Completion Celebration Modal */}
+      <AnimatePresence>
+        {showCourseCompletionModal && (
+          <Modal
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ zIndex: 1100 }}
+          >
+            <ModalContent
+              initial={{ scale: 0.7, opacity: 0, y: 40 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.7, opacity: 0, y: 40 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              style={{
+                textAlign: 'center',
+                border: '1px solid rgba(234, 179, 8, 0.4)',
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 60%, #1a2e12 100%)',
+                padding: '3rem 2.5rem',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Decorative sparkle rings */}
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
+                style={{
+                  position: 'absolute',
+                  top: '-40px',
+                  right: '-40px',
+                  width: '140px',
+                  height: '140px',
+                  borderRadius: '50%',
+                  border: '2px dashed rgba(234, 179, 8, 0.25)',
+                  pointerEvents: 'none',
+                }}
+              />
+              <motion.div
+                animate={{ rotate: -360 }}
+                transition={{ repeat: Infinity, duration: 12, ease: 'linear' }}
+                style={{
+                  position: 'absolute',
+                  bottom: '-30px',
+                  left: '-30px',
+                  width: '100px',
+                  height: '100px',
+                  borderRadius: '50%',
+                  border: '2px dashed rgba(34, 197, 94, 0.2)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* Trophy icon */}
+              <motion.div
+                initial={{ scale: 0, rotate: -15 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ delay: 0.15, type: 'spring', stiffness: 300 }}
+                style={{ fontSize: '5rem', marginBottom: '1rem', lineHeight: 1 }}
+              >
+                🏆
+              </motion.div>
+
+              {/* Congrats heading */}
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                style={{
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(90deg, #eab308, #22c55e)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                Congratulations!
+              </motion.h2>
+
+              {/* Sub message */}
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                style={{ fontSize: '1.1rem', color: '#cbd5e1', marginBottom: '0.5rem' }}
+              >
+                🎉 You have completed the entire course!
+              </motion.p>
+
+              {/* Course name */}
+              {course?.title && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  style={{
+                    fontSize: '0.95rem',
+                    color: '#94a3b8',
+                    marginBottom: '2rem',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  "{course.title}"
+                </motion.p>
+              )}
+
+              {/* Stars row */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.55 }}
+                style={{ fontSize: '1.5rem', marginBottom: '2rem', letterSpacing: '0.3rem' }}
+              >
+                ⭐⭐⭐⭐⭐
+              </motion.div>
+
+              {/* Continue button */}
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.65 }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowCourseCompletionModal(false)}
+                style={{
+                  background: 'linear-gradient(90deg, #eab308, #22c55e)',
+                  color: '#0f172a',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '0.75rem 2.5rem',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(34,197,94,0.3)',
+                }}
+              >
+                Continue
+              </motion.button>
+            </ModalContent>
+          </Modal>
+        )}
+      </AnimatePresence>
 
       {/* Assignment Submission Modal */}
       <AnimatePresence>

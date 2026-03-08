@@ -274,31 +274,43 @@ export default function VideoRoom() {
       }
     });
 
-    /* 4. New peer arrived — use socket ID comparison to break tie if both
-       arrive simultaneously and both got room-users:[]. The peer with the
-       lexicographically larger socket ID becomes the offerer. */
+    /* 4. New peer arrived.
+       Two scenarios:
+         a) We were first in room: peer joined after us and will send offer via room-users.
+            We must just create the PC and wait — NOT send an offer too.
+         b) True simultaneous join: both got empty room-users, both see user-connected.
+            Use socket ID as tiebreaker AFTER a delay — only if no offer has arrived yet.
+       Sending an offer immediately from user-connected causes a deadlock: both peers
+       set offerSent=true, then both skip answering each other → nobody connects. */
     socket.on("user-connected", async ({ socketId, userName: n }) => {
       remoteSockId.current = socketId;
       setPeerName(n);
       setStatus(`${n} joined. Connecting\u2026`);
 
-      // If we already sent an offer via room-users, do nothing extra
+      // If we already sent an offer via room-users, just set up the PC for the answer
       if (offerSent.current) { createPC(socketId); return; }
 
-      // Race condition fix: higher socket ID initiates the offer
+      // Create PC and wait — the peer who saw us in room-users will send their offer shortly.
+      createPC(socketId);
+
+      // Fallback for true simultaneous join: if no offer arrives within 2s and we have
+      // the higher socket ID, we initiate. This avoids a permanent deadlock on exact
+      // same-tick joins without racing against the room-users path.
       if (socket.id > socketId) {
-        offerSent.current = true;
-        try {
-          const pc = createPC(socketId);
-          if (pc.signalingState === "closed") return;
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit("offer", { roomId, offer, to: socketId });
-        } catch (err) {
-          console.warn("[user-connected] offer failed:", err.message);
-        }
-      } else {
-        createPC(socketId);
+        setTimeout(async () => {
+          // If a remote description was already set (offer received/answered), do nothing.
+          if (offerSent.current || remoteDescSet.current) return;
+          const pc = pcRef.current;
+          if (!pc || pc.signalingState === "closed") return;
+          offerSent.current = true;
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("offer", { roomId, offer, to: socketId });
+          } catch (err) {
+            console.warn("[user-connected] fallback offer failed:", err.message);
+          }
+        }, 2000);
       }
     });
 

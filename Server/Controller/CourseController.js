@@ -602,6 +602,40 @@ exports.completeCourse = async (req, res) => {
 
         await learner.save();
 
+        // Sync lectureProgress: mark every lecture in this course as completed
+        // so that both progress-tracking systems stay consistent.
+        if (course.curriculum?.sections) {
+            if (!learner.lectureProgress) learner.lectureProgress = [];
+            const now = new Date();
+            course.curriculum.sections.forEach(section => {
+                (section.lectures || []).forEach(lecture => {
+                    const lectureId = lecture._id?.toString();
+                    if (!lectureId) return;
+                    const idx = learner.lectureProgress.findIndex(
+                        p => p.courseId?.toString() === courseId && p.lectureId === lectureId
+                    );
+                    if (idx >= 0) {
+                        learner.lectureProgress[idx].completed = true;
+                        learner.lectureProgress[idx].completedAt = learner.lectureProgress[idx].completedAt || now;
+                        learner.lectureProgress[idx].lastAccessed = now;
+                    } else {
+                        learner.lectureProgress.push({
+                            courseId,
+                            lectureId,
+                            sectionId: section._id?.toString() || null,
+                            currentTime: 0,
+                            videoProgress: 100,
+                            completed: true,
+                            contentType: lecture.contentType || 'video',
+                            lastAccessed: now,
+                            completedAt: now,
+                        });
+                    }
+                });
+            });
+            await learner.save();
+        }
+
         // Also update the course's completion tracking if it exists
         if (course.progress) {
             const courseProgressEntry = course.progress.find(p => p.learnerId.toString() === userId);
@@ -2989,7 +3023,14 @@ exports.generateCertificate = async (req, res) => {
         const completedCount = lectureProgress.filter(lp => lp.completed).length || 0;
         const percent = totalLectures > 0 ? Math.round((completedCount / totalLectures) * 100) : 0;
 
-        if (percent < 100) {
+        // Also check the course-level completion record set by the completeCourse endpoint.
+        // The two tracking systems (per-lecture and course-level) can diverge when a user
+        // finishes all content and the course is marked complete via markCourseAsComplete().
+        const courseCompletionRecord = user.progress?.find(
+            p => p.courseId?.toString() === courseId && p.completed === true
+        );
+
+        if (percent < 100 && !courseCompletionRecord) {
             return res.status(400).json({
                 success: false,
                 message: `Course is only ${percent}% complete. 100% required for certificate.`

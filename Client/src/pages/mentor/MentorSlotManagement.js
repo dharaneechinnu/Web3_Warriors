@@ -38,12 +38,15 @@ const S = {
     color: t === "error" ? "#fca5a5" : "#86efac",
     border: `1px solid ${t === "error" ? "#ef4444" : "#22c55e"}40`
   }),
-  slotBadge: (status) => ({
+  slotBadge: (status, isExpired) => ({
     display: "inline-block", padding: "0.22rem 0.8rem", borderRadius: "2rem",
-    fontSize: "0.72rem", fontWeight: 700,
-    background: status === "available" ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
-    color: status === "available" ? "#86efac" : "#fca5a5",
-    textTransform: "uppercase"
+    fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
+    background: isExpired ? "rgba(107,114,128,0.2)" : 
+                status === "available" ? "rgba(34,197,94,0.2)" : 
+                status === "booked" ? "rgba(59,130,246,0.2)" : "rgba(239,68,68,0.2)",
+    color: isExpired ? "#9ca3af" : 
+           status === "available" ? "#86efac" : 
+           status === "booked" ? "#93c5fd" : "#fca5a5"
   }),
   grid: {
     display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem"
@@ -63,6 +66,48 @@ export default function MentorSlotManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [validationError, setValidationError] = useState(null);
+
+  // Get today's date in YYYY-MM-DD format for min date
+  const getMinDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  // Validate slot date and time
+  const validateSlotDateTime = (date, startTime) => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    // Check if date is in the past
+    if (date < todayStr) {
+      return {
+        valid: false,
+        message: "❌ Cannot create slots for past dates. Please select today or a future date."
+      };
+    }
+
+    // If date is today, check if start time is in the future
+    if (date === todayStr) {
+      const currentHours = today.getHours();
+      const currentMinutes = today.getMinutes();
+      const currentTimeStr = `${String(currentHours).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}`;
+      
+      // Parse start time
+      const [slotHours, slotMinutes] = startTime.split(':').map(Number);
+      const slotTimeInMinutes = slotHours * 60 + slotMinutes;
+      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
+
+      if (slotTimeInMinutes <= currentTimeInMinutes) {
+        return {
+          valid: false,
+          message: "⏰ Cannot create slots in the past. Please choose a future time on today's schedule."
+        };
+      }
+    }
+
+    return { valid: true, message: "" };
+  };
 
   // Fetch slots on component mount
   useEffect(() => {
@@ -88,10 +133,29 @@ export default function MentorSlotManagement() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Validate on change
+    if (name === "date" || name === "startTime") {
+      const updatedFormData = { ...formData, [name]: value };
+      const validation = validateSlotDateTime(updatedFormData.date, updatedFormData.startTime);
+      setValidationError(validation.valid ? null : validation.message);
+    } else {
+      setValidationError(null);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate before submitting
+    const validation = validateSlotDateTime(formData.date, formData.startTime);
+    if (!validation.valid) {
+      setValidationError(validation.message);
+      setError(validation.message);
+      return;
+    }
+
+    setValidationError(null);
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -141,8 +205,24 @@ export default function MentorSlotManagement() {
 
   const formatDateTime = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+    return date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "short" });
   };
+
+  const fmtISTTime = (dateStr) => new Date(dateStr).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+
+  /* Preview slots that will be created */
+  const previewSlots = (() => {
+    const makeIST = (d, t) => new Date(`${d}T${t}:00+05:30`);
+    let cursor = makeIST(formData.date, formData.startTime);
+    const end  = makeIST(formData.date, formData.endTime);
+    const out  = [];
+    while (cursor < end) {
+      const slotEnd = new Date(cursor.getTime() + 60 * 60000);
+      out.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
+      cursor = slotEnd;
+    }
+    return out;
+  })();
 
   return (
     <div style={S.page}>
@@ -158,6 +238,25 @@ export default function MentorSlotManagement() {
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem" }}>
             ➕ Create New Time Slots
           </h3>
+          {/* Quick-pick time ranges */}
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            {[
+              { label: "🌅 Morning", start: "09:00", end: "12:00" },
+              { label: "☀️ Afternoon", start: "13:00", end: "17:00" },
+              { label: "🌆 Evening", start: "18:00", end: "21:00" },
+            ].map(({ label, start, end }) => (
+              <button key={label} type="button"
+                onClick={() => setFormData(f => ({ ...f, startTime: start, endTime: end }))}
+                style={{
+                  padding: "0.3rem 0.85rem", borderRadius: "2rem", border: "1px solid rgba(124,58,237,0.35)",
+                  background: formData.startTime === start && formData.endTime === end
+                    ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)",
+                  color: "#c4b5fd", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer"
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
           <form onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
               {/* Date */}
@@ -168,6 +267,7 @@ export default function MentorSlotManagement() {
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
+                  min={getMinDate()}
                   style={S.input}
                   required
                 />
@@ -175,7 +275,7 @@ export default function MentorSlotManagement() {
 
               {/* Start Time */}
               <div>
-                <label style={S.label}>Start Time *</label>
+                <label style={S.label}>Start Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                 <input
                   type="time"
                   name="startTime"
@@ -188,7 +288,7 @@ export default function MentorSlotManagement() {
 
               {/* End Time */}
               <div>
-                <label style={S.label}>End Time *</label>
+                <label style={S.label}>End Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                 <input
                   type="time"
                   name="endTime"
@@ -200,11 +300,34 @@ export default function MentorSlotManagement() {
               </div>
             </div>
 
-            <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginBottom: "1rem" }}>
-              💡 Auto-generates 60-minute slots between start and end times
-            </p>
+            {/* Validation Error */}
+            {validationError && (
+              <div style={{
+                background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)",
+                borderRadius: "0.6rem", padding: "0.75rem 1rem", marginBottom: "1rem",
+                color: "#fca5a5", fontSize: "0.9rem"
+              }}>
+                ⚠️ {validationError}
+              </div>
+            )}
+            {previewSlots.length > 0 && (
+              <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "0.6rem", padding: "0.75rem 1rem", marginBottom: "1rem" }}>
+                <div style={{ fontSize: "0.82rem", color: "#86efac", fontWeight: 700, marginBottom: "0.4rem" }}>
+                  ✅ Will create {previewSlots.length} slot{previewSlots.length > 1 ? "s" : ""} (1 hour each, IST):
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                  {previewSlots.map((s, i) => (
+                    <span key={i} style={{ fontSize: "0.78rem", background: "rgba(34,197,94,0.12)", color: "#4ade80", padding: "0.2rem 0.6rem", borderRadius: "1rem" }}>
+                      {new Date(s.start).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {" – "}
+                      {new Date(s.end).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            <button type="submit" style={{ ...S.btn("primary"), width: "100%" }} disabled={submitting}>
+            <button type="submit" style={{ ...S.btn("primary"), width: "100%" }} disabled={submitting || validationError !== null}>
               {submitting ? "⏳ Creating..." : "✨ Create Slots"}
             </button>
           </form>
@@ -227,37 +350,55 @@ export default function MentorSlotManagement() {
             </div>
           ) : (
             <div style={S.grid}>
-              {slots.map(slot => (
-                <motion.div
-                  key={slot._id}
-                  style={S.card}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
-                        📅 {formatDateTime(slot.startTime)}
-                      </div>
-                      <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
-                        to {new Date(slot.endTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    </div>
-                    <span style={S.slotBadge(slot.status)}>
-                      {slot.status}
-                    </span>
-                  </div>
+              {slots.map(slot => {
+                // Determine if slot is expired based on endTime
+                const endTime = new Date(slot.endTime);
+                const now = new Date();
+                const isExpired = endTime <= now;
+                const displayStatus = isExpired ? 'expired' : (slot.displayStatus || slot.status);
 
-                  {slot.status === "available" && (
-                    <button
-                      onClick={() => handleDeleteSlot(slot._id)}
-                      style={{ ...S.btn("danger"), width: "100%", marginTop: "0.75rem" }}
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                </motion.div>
-              ))}
+                return (
+                  <motion.div
+                    key={slot._id}
+                    style={{ ...S.card, opacity: isExpired ? 0.6 : 1 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+                          📅 {formatDateTime(slot.startTime)}
+                        </div>
+                        <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
+                          to {fmtISTTime(slot.endTime)}
+                        </div>
+                        {isExpired && (
+                          <div style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "0.35rem", fontStyle: "italic" }}>
+                            ⏰ Expired
+                          </div>
+                        )}
+                      </div>
+                      <span style={S.slotBadge(slot.status, isExpired)}>
+                        {displayStatus}
+                      </span>
+                    </div>
+
+                    {!isExpired && slot.status === "available" && (
+                      <button
+                        onClick={() => handleDeleteSlot(slot._id)}
+                        style={{ ...S.btn("danger"), width: "100%", marginTop: "0.75rem" }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
+                    {isExpired && (
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.75rem", textAlign: "center", fontStyle: "italic" }}>
+                        This slot has expired and is no longer visible to learners
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>

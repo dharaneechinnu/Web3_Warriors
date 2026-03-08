@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const MentorAvailabilitySchema = new mongoose.Schema({
     mentorId: { 
         type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
+        ref: 'UsersLogins', 
         required: true 
     },
     dayOfWeek: { 

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const MentorSlotSchema = new mongoose.Schema({
     mentorId: { 
         type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
+        ref: 'UsersLogins', 
         required: true 
     },
     availabilityId: { 
@@ -36,7 +36,7 @@ const MentorSlotSchema = new mongoose.Schema({
     },
     bookedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        ref: 'UsersLogins',
         default: null
     },
     bookedAt: {
