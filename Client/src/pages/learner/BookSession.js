@@ -528,8 +528,11 @@ export default function BookSession() {
                   border: "1px solid rgba(255,255,255,0.08)"
                 }}>
                   <div style={{ fontSize: "1.5rem", marginBottom: "0.4rem" }}>📭</div>
-                  <div style={{ color: "#94a3b8", fontSize: "0.85rem", marginBottom: "0.6rem" }}>
-                    This mentor has no available slots right now.
+                  <div style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "0.6rem", fontWeight: 500 }}>
+                    No upcoming mentorship slots available.
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.8rem" }}>
+                    This mentor hasn't scheduled any available time slots yet. Check back later or try another mentor.
                   </div>
                   <button
                     style={{ ...S.btn(""), fontSize: "0.8rem", padding: "0.4rem 1rem" }}
