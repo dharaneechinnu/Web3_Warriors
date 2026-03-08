@@ -29,6 +29,7 @@ import VerifyMentor from './pages/mentor/Verify';
 
 // Udemy-style Course System Components
 import LearnerCourseView from './pages/learner/LearnerCourseView';
+import EnrolledCourses from './pages/learner/EnrolledCourses';
 import Challenges from './pages/learner/Challenges';
 import SubmissionStatus from './pages/learner/SubmissionStatus';
 import LearnerProfile from './pages/learner/LearnerProfile';
@@ -225,6 +226,11 @@ function AppRoutes() {
         <Route path="/learner-home" element={
           <LearnerRoute>
             <LearnerHome />
+          </LearnerRoute>
+        } />
+        <Route path="/enrolled-courses" element={
+          <LearnerRoute>
+            <EnrolledCourses />
           </LearnerRoute>
         } />
         <Route path="/learner-dashboard" element={

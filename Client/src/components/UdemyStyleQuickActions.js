@@ -119,7 +119,7 @@ const UdemyStyleQuickActions = ({ verificationStatus }) => {
       icon: <FaBookOpen />,
       title: 'My Learning',
       description: 'Continue with your enrolled courses and track your progress.',
-      action: () => navigate('/learner-home'),
+      action: () => navigate('/enrolled-courses'),
       buttonText: 'Continue Learning'
     },
     {
