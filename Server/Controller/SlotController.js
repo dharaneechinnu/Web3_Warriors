@@ -2,19 +2,18 @@ const MentorSlot = require('../Model/MentorSlotModel');
 const MentorAvailability = require('../Model/MentorAvailabilityModel');
 const User = require('../Model/UserModel');
 
+// Helper: parse a "YYYY-MM-DD" + "HH:MM" pair as IST (Asia/Kolkata, UTC+5:30)
+// so that a mentor entering "09:00" gets 09:00 IST stored, not 09:00 UTC.
+const parseIST = (date, time) => new Date(`${date}T${time}:00+05:30`);
+
 // Helper: Generate 60-minute slots from start to end time
-// Uses Date.UTC() to parse the date portion so the server's local timezone
-// never shifts the date (e.g., "2026-03-09" + UTC midnight is always March 9).
-// Hours are then applied as UTC offsets to match the same wall-clock intent.
+// Parses input times as IST so the stored UTC value correctly reflects
+// what the mentor sees on their clock.
 const generateSlots = (date, startTime, endTime, mentorId) => {
     const slots = [];
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin]     = endTime.split(':').map(Number);
-    const [year, month, day]    = date.split('-').map(Number);
 
-    // Build timestamps entirely in UTC so the date never drifts
-    let cursor      = new Date(Date.UTC(year, month - 1, day, startHour, startMin, 0, 0));
-    const endMs     = new Date(Date.UTC(year, month - 1, day, endHour,   endMin,   0, 0)).getTime();
+    let cursor  = parseIST(date, startTime);
+    const endMs = parseIST(date, endTime).getTime();
 
     while (cursor.getTime() < endMs) {
         const slotEnd = new Date(cursor.getTime() + 60 * 60000); // +1 hour
@@ -108,11 +107,10 @@ exports.getAvailableSlots = async (req, res) => {
         const filter = { mentorId, status: 'available' };
 
         if (date) {
-            // Filter for a specific date — use Date.UTC to avoid local-TZ drift
-            const [y, m, d] = date.split('-').map(Number);
+            // Filter for a specific IST date — use IST midnight to IST 23:59
             filter.startTime = {
-                $gte: new Date(Date.UTC(y, m - 1, d,  0,  0,  0,   0)),
-                $lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+                $gte: parseIST(date, '00:00'),
+                $lte: new Date(parseIST(date, '23:59').getTime() + 59000)
             };
         } else {
             // Use start of today (UTC midnight) so slots created for today

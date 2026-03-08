@@ -141,8 +141,24 @@ export default function MentorSlotManagement() {
 
   const formatDateTime = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+    return date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "short" });
   };
+
+  const fmtISTTime = (dateStr) => new Date(dateStr).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+
+  /* Preview slots that will be created */
+  const previewSlots = (() => {
+    const makeIST = (d, t) => new Date(`${d}T${t}:00+05:30`);
+    let cursor = makeIST(formData.date, formData.startTime);
+    const end  = makeIST(formData.date, formData.endTime);
+    const out  = [];
+    while (cursor < end) {
+      const slotEnd = new Date(cursor.getTime() + 60 * 60000);
+      out.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
+      cursor = slotEnd;
+    }
+    return out;
+  })();
 
   return (
     <div style={S.page}>
@@ -158,6 +174,25 @@ export default function MentorSlotManagement() {
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem" }}>
             ➕ Create New Time Slots
           </h3>
+          {/* Quick-pick time ranges */}
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            {[
+              { label: "🌅 Morning", start: "09:00", end: "12:00" },
+              { label: "☀️ Afternoon", start: "13:00", end: "17:00" },
+              { label: "🌆 Evening", start: "18:00", end: "21:00" },
+            ].map(({ label, start, end }) => (
+              <button key={label} type="button"
+                onClick={() => setFormData(f => ({ ...f, startTime: start, endTime: end }))}
+                style={{
+                  padding: "0.3rem 0.85rem", borderRadius: "2rem", border: "1px solid rgba(124,58,237,0.35)",
+                  background: formData.startTime === start && formData.endTime === end
+                    ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)",
+                  color: "#c4b5fd", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer"
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
           <form onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
               {/* Date */}
@@ -175,7 +210,7 @@ export default function MentorSlotManagement() {
 
               {/* Start Time */}
               <div>
-                <label style={S.label}>Start Time *</label>
+                <label style={S.label}>Start Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                 <input
                   type="time"
                   name="startTime"
@@ -188,7 +223,7 @@ export default function MentorSlotManagement() {
 
               {/* End Time */}
               <div>
-                <label style={S.label}>End Time *</label>
+                <label style={S.label}>End Time * <span style={{ color: "#475569", fontWeight: 400 }}>(IST)</span></label>
                 <input
                   type="time"
                   name="endTime"
@@ -200,9 +235,23 @@ export default function MentorSlotManagement() {
               </div>
             </div>
 
-            <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginBottom: "1rem" }}>
-              💡 Auto-generates 60-minute slots between start and end times
-            </p>
+            {/* Slot preview */}
+            {previewSlots.length > 0 && (
+              <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "0.6rem", padding: "0.75rem 1rem", marginBottom: "1rem" }}>
+                <div style={{ fontSize: "0.82rem", color: "#86efac", fontWeight: 700, marginBottom: "0.4rem" }}>
+                  ✅ Will create {previewSlots.length} slot{previewSlots.length > 1 ? "s" : ""} (1 hour each, IST):
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                  {previewSlots.map((s, i) => (
+                    <span key={i} style={{ fontSize: "0.78rem", background: "rgba(34,197,94,0.12)", color: "#4ade80", padding: "0.2rem 0.6rem", borderRadius: "1rem" }}>
+                      {new Date(s.start).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {" – "}
+                      {new Date(s.end).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button type="submit" style={{ ...S.btn("primary"), width: "100%" }} disabled={submitting}>
               {submitting ? "⏳ Creating..." : "✨ Create Slots"}
@@ -240,7 +289,7 @@ export default function MentorSlotManagement() {
                         📅 {formatDateTime(slot.startTime)}
                       </div>
                       <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
-                        to {new Date(slot.endTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        to {fmtISTTime(slot.endTime)}
                       </div>
                     </div>
                     <span style={S.slotBadge(slot.status)}>
