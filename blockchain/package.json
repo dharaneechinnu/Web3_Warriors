@@ -1,0 +1,20 @@
+{
+  "name": "skill-platform-blockchain",
+  "version": "1.0.0",
+  "description": "Hardhat blockchain project for SkillPlatform (SkillToken + SkillCredentialNFT + SkillPlatform)",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deployAll.js --network ganache",
+    "deploy:testnet": "hardhat run scripts/deployAll.js --network amoy",
+    "node": "hardhat node",
+    "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
