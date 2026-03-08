@@ -738,6 +738,14 @@ const Navbar = () => {
                       </NavDropdownTrigger>
                       <NavDropdownMenu open={openDropdown === 'tools'}>
                         <NavDropdownLabel>Manage</NavDropdownLabel>
+                        <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/requests" : "/mentor/application-status"} onClick={closeDropdowns} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>📬 Session Requests</span>
+                          {notifications.filter(n => !n.isRead && n.type === 'booking_request').length > 0 && (
+                            <span style={{ background: '#f59e0b', color: '#000', borderRadius: '50%', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800, flexShrink: 0 }}>
+                              {notifications.filter(n => !n.isRead && n.type === 'booking_request').length}
+                            </span>
+                          )}
+                        </NavDropdownItem>
                         <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={closeDropdowns}>📅 Manage Sessions</NavDropdownItem>
                         <NavDropdownItem to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={closeDropdowns}>🏆 My Challenges</NavDropdownItem>
                         <DropdownDivider />
@@ -797,6 +805,7 @@ const Navbar = () => {
                     {userRole === 'mentor' ? (
                       <>
                         <DropdownItem to={verificationStatus === 'approved' ? "/mentor/profile" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>👤 My Profile</DropdownItem>
+                        <DropdownItem to={verificationStatus === 'approved' ? "/mentor/requests" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>📬 Requests</DropdownItem>
                         <DropdownItem to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>📅 Sessions</DropdownItem>
                         <DropdownItem to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>🏆 Challenges</DropdownItem>
                         <DropdownItem to={verificationStatus === 'approved' ? "/mentor/submissions" : "/mentor/application-status"} onClick={() => setUserMenuOpen(false)}>📋 Submissions</DropdownItem>
@@ -918,6 +927,7 @@ const Navbar = () => {
               <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/my-courses" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📚 My Courses</MobileNavLink>
               <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/submissions" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📋 Review Submissions</MobileNavLink>
               <div style={{fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'rgba(255,255,255,0.3)', padding:'0.75rem 0 0.25rem'}}>Tools</div>
+              <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/requests" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📬 Session Requests</MobileNavLink>
               <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/sessions" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>📅 Manage Sessions</MobileNavLink>
               <MobileNavLink to={verificationStatus === 'approved' ? "/mentor/challenges" : "/mentor/application-status"} onClick={() => setMobileMenuOpen(false)}>🏆 My Challenges</MobileNavLink>
               <MobileNavLink to="/wallet" onClick={() => setMobileMenuOpen(false)}>💼 Wallet</MobileNavLink>

@@ -38,6 +38,7 @@ import SubmissionReview from './pages/mentor/SubmissionReview';
 import MentorProfileDashboard from './pages/mentor/MentorProfileDashboard';
 import MentorMyCourses from './pages/mentor/MentorMyCourses';
 import MentorSlotManagement from './pages/mentor/MentorSlotManagement';
+import MentorMentorshipRequests from './pages/mentor/MentorMentorshipRequests';
 import BookSession from './pages/learner/BookSession';
 import MyCertificates from './pages/learner/MyCertificates';
 import CertificateVerify from './pages/learner/CertificateVerify';
@@ -317,6 +318,9 @@ function AppRoutes() {
         } />
         <Route path="/mentor/slots" element={
           <MentorRoute><MentorSlotManagement /></MentorRoute>
+        } />
+        <Route path="/mentor/requests" element={
+          <MentorRoute><MentorMentorshipRequests /></MentorRoute>
         } />
 
         {/* ── Mentor Application routes ───────────────────────────── */}

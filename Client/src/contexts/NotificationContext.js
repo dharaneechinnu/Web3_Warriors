@@ -34,7 +34,7 @@ export const getNotifMeta = (type) => NOTIF_META[type] || NOTIF_META.general;
 const getNotificationRoute = (notif) => {
   const role = localStorage.getItem('userRole') || 'learner';
   switch (notif.type) {
-    case 'booking_request':      return '/mentor/sessions';
+    case 'booking_request':      return '/mentor/requests';
     case 'booking_accepted':     return '/sessions';
     case 'booking_rejected':     return '/sessions';
     case 'session_reminder':     return role === 'mentor' ? '/mentor/sessions' : '/sessions';

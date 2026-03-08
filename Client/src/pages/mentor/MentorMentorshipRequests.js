@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import api from "../../services/api";
+import { useNotifications } from "../../contexts/NotificationContext";
 
 // Helpers
 const tok = () => localStorage.getItem("token");
 const uid = () => localStorage.getItem("userId");
 
 const fmt = (d) =>
-  d ? new Date(d).toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" }) : "--";
+  d ? new Date(d).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short"
+      }) : "--";
 
 // Styles
 const S = {
@@ -60,12 +64,21 @@ const S = {
 // Component
 const MentorMentorshipRequests = () => {
   const mentorId = uid();
+  const navigate = useNavigate();
+  const mentorName = localStorage.getItem("userName") || "Mentor";
   const [tab, setTab] = useState("pending");
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [rejectingId, setRejectingId] = useState(null);
+
+  // Reject modal state
+  const [rejectModal, setRejectModal] = useState(null); // { requestId, learnerName, topic }
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+
+  // Subscribe to real-time notifications so new booking requests auto-refresh
+  const { notifications } = useNotifications();
 
   // Fetch requests
   const fetchRequests = useCallback(async () => {
@@ -86,24 +99,27 @@ const MentorMentorshipRequests = () => {
 
   useEffect(() => {
     fetchRequests();
-    const interval = setInterval(fetchRequests, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
   }, [fetchRequests]);
+
+  // Re-fetch whenever a new booking_request notification arrives
+  useEffect(() => {
+    const latest = notifications[0];
+    if (latest && latest.type === "booking_request") {
+      fetchRequests();
+    }
+  }, [notifications, fetchRequests]);
 
   // Accept request
   const handleAccept = async (requestId) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.patch(`/mentorship-requests/${requestId}/accept`, 
-        { mentorId }, 
+      await api.patch(`/mentorship-requests/${requestId}/accept`,
+        { mentorId },
         { headers: { Authorization: `Bearer ${tok()}` } }
       );
       setSuccess("✅ Request accepted! Session created.");
-      setTimeout(() => {
-        setSuccess(null);
-        fetchRequests();
-      }, 2000);
+      setTimeout(() => { setSuccess(null); fetchRequests(); }, 2000);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to accept request");
     } finally {
@@ -111,29 +127,30 @@ const MentorMentorshipRequests = () => {
     }
   };
 
-  // Reject request
-  const handleReject = async (requestId) => {
-    const reason = window.prompt("Reason for declining (optional):");
-    if (reason === null) return; // User cancelled
+  // Open reject modal
+  const openRejectModal = (request) => {
+    setRejectModal({ requestId: request._id, learnerName: request.learnerId?.name, topic: request.topic });
+    setRejectReason("");
+  };
 
-    setLoading(true);
-    setRejectingId(requestId);
+  // Submit reject
+  const handleReject = async () => {
+    if (!rejectModal) return;
+    setRejectSubmitting(true);
     setError(null);
     try {
-      await api.patch(`/mentorship-requests/${requestId}/reject`, 
-        { mentorId, rejectReason: reason || "" }, 
+      await api.patch(`/mentorship-requests/${rejectModal.requestId}/reject`,
+        { mentorId, rejectReason: rejectReason.trim() },
         { headers: { Authorization: `Bearer ${tok()}` } }
       );
       setSuccess("Request declined.");
-      setTimeout(() => {
-        setSuccess(null);
-        fetchRequests();
-      }, 1500);
+      setRejectModal(null);
+      setRejectReason("");
+      setTimeout(() => { setSuccess(null); fetchRequests(); }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to reject request");
+      setError(err.response?.data?.message || "Failed to decline request");
     } finally {
-      setLoading(false);
-      setRejectingId(null);
+      setRejectSubmitting(false);
     }
   };
 
@@ -238,9 +255,9 @@ const MentorMentorshipRequests = () => {
                     <div style={{ color: "#94a3b8", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", marginBottom: "0.2rem" }}>
                       Learner's Message
                     </div>
-                    <div style={{ 
-                      color: "#94a3b8", 
-                      fontSize: "0.85rem", 
+                    <div style={{
+                      color: "#94a3b8",
+                      fontSize: "0.85rem",
                       fontStyle: "italic",
                       background: "rgba(255,255,255,0.02)",
                       padding: "0.5rem 0.75rem",
@@ -258,7 +275,7 @@ const MentorMentorshipRequests = () => {
                     <div style={{ color: "#94a3b8", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", marginBottom: "0.2rem" }}>
                       Requested Slot
                     </div>
-                    <div style={{ 
+                    <div style={{
                       display: "inline-flex", alignItems: "center", gap: "0.4rem",
                       background: request.status === "pending" ? "rgba(245,158,11,0.1)" : "rgba(6,182,212,0.1)",
                       padding: "0.3rem 0.7rem", borderRadius: "0.5rem", fontSize: "0.85rem",
@@ -269,10 +286,43 @@ const MentorMentorshipRequests = () => {
                   </div>
                 )}
 
+                {/* Rejection reason (for rejected tab) */}
+                {request.status === "rejected" && request.rejectReason && (
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <div style={{ color: "#94a3b8", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", marginBottom: "0.2rem" }}>
+                      Decline Reason
+                    </div>
+                    <div style={{ color: "#fca5a5", fontSize: "0.85rem" }}>{request.rejectReason}</div>
+                  </div>
+                )}
+
+                {/* For accepted requests: show session join button */}
+                {request.status === "accepted" && request.slotId?.sessionId?.roomId && (
+                  <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      onClick={() => navigate(`/room/${request.slotId.sessionId.roomId}`, {
+                        state: { role: "mentor", userName: mentorName, userId: mentorId }
+                      })}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                        background: "linear-gradient(135deg,#059669,#10b981)",
+                        color: "#fff", border: "none", cursor: "pointer", padding: "0.5rem 1.2rem",
+                        borderRadius: "0.55rem", fontSize: "0.88rem", fontWeight: 700,
+                        boxShadow: "0 0 16px rgba(16,185,129,0.35)"
+                      }}
+                    >
+                      📹 Join Meet
+                    </button>
+                    <span style={{ fontSize: "0.75rem", color: "#6ee7b7", fontWeight: 600 }}>
+                      Session confirmed ✓
+                    </span>
+                  </div>
+                )}
+
                 {/* Request timestamp */}
                 <div style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "0.75rem" }}>
                   Received {new Date(request.createdAt).toLocaleString("en-IN", {
-                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+                    timeZone: "Asia/Kolkata", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
                   })}
                 </div>
               </div>
@@ -289,10 +339,28 @@ const MentorMentorshipRequests = () => {
                   </button>
                   <button
                     style={S.btn("danger")}
-                    onClick={() => handleReject(request._id)}
-                    disabled={loading || rejectingId === request._id}
+                    onClick={() => openRejectModal(request)}
+                    disabled={loading}
                   >
                     ✗ Decline
+                  </button>
+                </div>
+              )}
+              {request.status === "accepted" && request.slotId?.sessionId?.roomId && (
+                <div style={{ display: "flex", gap: "0.5rem", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+                  <button
+                    onClick={() => navigate(`/room/${request.slotId.sessionId.roomId}`, {
+                      state: { role: "mentor", userName: mentorName, userId: mentorId }
+                    })}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                      background: "linear-gradient(135deg,#059669,#10b981)",
+                      color: "#fff", border: "none", cursor: "pointer", padding: "0.55rem 1.3rem",
+                      borderRadius: "0.6rem", fontSize: "0.9rem", fontWeight: 700,
+                      boxShadow: "0 0 18px rgba(16,185,129,0.4)", whiteSpace: "nowrap"
+                    }}
+                  >
+                    📹 Join Meet
                   </button>
                 </div>
               )}
@@ -300,6 +368,82 @@ const MentorMentorshipRequests = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* ── Reject modal ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {rejectModal && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setRejectModal(null)}
+              style={{
+                position: "fixed", inset: 0,
+                background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000
+              }}
+            />
+            {/* Modal */}
+            <motion.div
+              key="modal"
+              initial={{ opacity: 0, scale: 0.92, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: -20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              style={{
+                position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                zIndex: 1001, width: "90%", maxWidth: 480,
+                background: "rgba(15,23,42,0.98)", border: "1px solid rgba(239,68,68,0.3)",
+                borderRadius: "1.2rem", padding: "2rem", boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
+              }}
+            >
+              <h3 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "0.4rem" }}>
+                ✗ Decline Request
+              </h3>
+              <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "1.25rem" }}>
+                Declining <strong style={{ color: "#fff" }}>{rejectModal.learnerName}</strong>'s request for{" "}
+                <strong style={{ color: "#c4b5fd" }}>{rejectModal.topic}</strong>
+              </p>
+
+              <label style={{ display: "block", color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, marginBottom: "0.4rem" }}>
+                Reason (optional — learner will see this)
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder="e.g. I'm unavailable at this time, please pick another slot..."
+                rows={3}
+                style={{
+                  width: "100%", padding: "0.75rem 1rem", borderRadius: "0.6rem", resize: "vertical",
+                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#fff", fontSize: "0.9rem", outline: "none", boxSizing: "border-box"
+                }}
+              />
+
+              {error && (
+                <div style={{ ...S.alert("error"), marginTop: "0.75rem" }}>{error}</div>
+              )}
+
+              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "1.25rem" }}>
+                <button
+                  style={S.btn("default")}
+                  onClick={() => { setRejectModal(null); setError(null); }}
+                  disabled={rejectSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{ ...S.btn("danger"), background: "rgba(239,68,68,0.85)", color: "#fff" }}
+                  onClick={handleReject}
+                  disabled={rejectSubmitting}
+                >
+                  {rejectSubmitting ? "⏳ Declining..." : "✗ Confirm Decline"}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
