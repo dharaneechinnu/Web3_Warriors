@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import api from "../../services/api";
+import ConnectWallet from '../../components/ConnectWallet';
 import UdemyStyleQuickActions from "../../components/UdemyStyleQuickActions";
 import { getMyApplication } from "../../services/mentorApplicationService";
 
@@ -644,28 +645,31 @@ const MentorHome = () => {
               <RoleBadge>🎯 Role: Mentor</RoleBadge>
               <Subtitle>Teach → Validate → Build Trust</Subtitle>
             </div>
-            {verificationStatus === 'approved' ? (
-              <motion.button
-                onClick={() => navigate('/course-upload')}
-                className="px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-fuchsia-500/25 flex items-center gap-2"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-                </svg>
-                Upload Course
-              </motion.button>
-            ) : (
-              <motion.button
-                onClick={() => navigate('/mentor/application-status')}
-                style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                className="px-6 py-3 bg-gray-700 text-gray-300 font-semibold rounded-lg flex items-center gap-2 border border-gray-600"
-                title="Get verified first to upload courses"
-              >
-                🔒 Upload Course (Verification Required)
-              </motion.button>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem' }}>
+              <ConnectWallet compact />
+              {verificationStatus === 'approved' ? (
+                <motion.button
+                  onClick={() => navigate('/course-upload')}
+                  className="px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-fuchsia-500/25 flex items-center gap-2"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+                  </svg>
+                  Upload Course
+                </motion.button>
+              ) : (
+                <motion.button
+                  onClick={() => navigate('/mentor/application-status')}
+                  style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                  className="px-6 py-3 bg-gray-700 text-gray-300 font-semibold rounded-lg flex items-center gap-2 border border-gray-600"
+                  title="Get verified first to upload courses"
+                >
+                  🔒 Upload Course (Verification Required)
+                </motion.button>
+              )}
+            </div>
           </div>
         </HeaderSection>
 

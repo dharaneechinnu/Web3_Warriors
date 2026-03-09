@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
+import ConnectWallet from '../../components/ConnectWallet';
 
 const MentorProfileDashboard = () => {
   const [profile, setProfile] = useState(null);
@@ -177,6 +178,9 @@ const MentorProfileDashboard = () => {
                   )}
                 </>
               )}
+            </div>
+            <div className="ml-auto flex items-center">
+              <ConnectWallet compact />
             </div>
           </div>
         </div>

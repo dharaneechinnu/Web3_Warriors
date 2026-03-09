@@ -3,6 +3,9 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { getMyApplication } from "../../services/mentorApplicationService";
+import TransactionStatus from "../../components/TransactionStatus";
+import { confirmSession as web3ConfirmSession, cancelSession as web3CancelSession } from "../../web3/services/skillPlatformService";
+import { BLOCK_EXPLORER } from "../../web3/config";
 
 /* -- helpers -- */
 const tok = () => localStorage.getItem("token");
@@ -93,6 +96,12 @@ const SessionManagement = () => {
   const [error, setError]               = useState(null);
   const [success, setSuccess]           = useState(null);
   const [verificationStatus, setVerificationStatus] = useState(null); // null|'pending'|'approved'|'rejected'|'not_applied'
+
+  // Web3 transaction state
+  const [txVisible, setTxVisible] = useState(false);
+  const [txStatus, setTxStatus] = useState('wallet');
+  const [txMessage, setTxMessage] = useState('');
+  const [txHash, setTxHash] = useState('');
 
   /* -- slot management state -- */
   const [slotForm, setSlotForm] = useState({
@@ -311,13 +320,43 @@ const SessionManagement = () => {
 
   /* -- mark complete -- */
   const markComplete = async (id) => {
+    // Step 1: Confirm session on blockchain (releases ETH to mentor)
+    const session = all.find(s => s._id === id);
+    if (session?.blockchainSessionId != null) {
+      setTxVisible(true);
+      setTxStatus('wallet');
+      setTxMessage('Confirm session completion in MetaMask to release ETH escrow…');
+      setTxHash('');
+      try {
+        const tx = await web3ConfirmSession(session.blockchainSessionId);
+        setTxStatus('pending');
+        setTxMessage('Blockchain confirmed! Updating on server…');
+        setTxHash(tx.transactionHash || '');
+      } catch (err) {
+        setTxStatus('error');
+        setTxMessage(err.message || 'Blockchain confirmation failed.');
+        return; // Don't mark complete on server if blockchain fails
+      }
+    }
+
+    // Step 2: API mark complete
     try {
       await api.patch(`/sessions/complete/${id}`, { mentorId }, { headers: { Authorization: `Bearer ${tok()}` } });
-      setSuccess("Session marked as completed!");
+      if (txVisible) {
+        setTxStatus('success');
+        setTxMessage('✅ Session completed! ETH released to your wallet.');
+      } else {
+        setSuccess("Session marked as completed!");
+      }
       fetchAll();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to complete session");
+      if (txVisible) {
+        setTxStatus('error');
+        setTxMessage(err.response?.data?.message || 'Server update failed after blockchain tx.');
+      } else {
+        setError(err.response?.data?.message || "Failed to complete session");
+      }
     }
   };
 
@@ -395,6 +434,14 @@ const SessionManagement = () => {
 
   return (
     <div style={S.page}>
+      <TransactionStatus
+        visible={txVisible}
+        status={txStatus}
+        message={txMessage}
+        txHash={txHash}
+        explorer={BLOCK_EXPLORER}
+        onClose={() => setTxVisible(false)}
+      />
       <div style={S.wrap}>
 
         {/* Header */}

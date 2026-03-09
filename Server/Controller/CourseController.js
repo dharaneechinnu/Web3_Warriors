@@ -6,8 +6,6 @@ const mongoose = require('mongoose');
 const { AssignmentSubmission } = require('../Model/CourseSystemModel');
 const fs = require('fs');
 const notifService = require('../services/notificationService');
-const tokenContractService = require('../web3/tokenContract');
-const nftContractService = require('../web3/nftContract');
 
 // io reference (set from Server.js)
 let io = null;
@@ -288,27 +286,9 @@ exports.enrollInCourse = async (req, res) => {
             });
         }
 
-        // ── Web3: On-chain token transfer ─────────────────────────────────────
         const mentorUser = await User.findById(course.mentorId || course.mentor);
-        let enrollTxHash = null;
-        if (learner.UserWalletAddress && mentorUser?.UserWalletAddress) {
-            const txResult = await tokenContractService.transferForCourse(
-                learner.UserWalletAddress,
-                mentorUser.UserWalletAddress,
-                tokenCost
-            );
-            if (!txResult.success) {
-                return res.status(400).json({
-                    message: `Blockchain transfer failed: ${txResult.error}`
-                });
-            }
-            enrollTxHash = txResult.txHash;
-            console.log(`[enrollInCourse] On-chain transfer tx: ${enrollTxHash}`);
-        } else {
-            console.warn('[enrollInCourse] Missing wallet address — skipping on-chain transfer');
-        }
 
-        // Deduct tokens from learner's DB balance (keep in sync)
+        // Deduct tokens from learner's DB balance
         learner.tokenBalance -= tokenCost;
         
         // Add spend transaction for learner
@@ -316,7 +296,6 @@ exports.enrollInCourse = async (req, res) => {
             transactionType: 'spend',
             amount: tokenCost,
             description: `Enrolled in course: ${course.title}`,
-            txHash: enrollTxHash || null,
             timestamp: new Date()
         });
 
@@ -327,7 +306,6 @@ exports.enrollInCourse = async (req, res) => {
                 transactionType: 'earn',
                 amount: tokenCost,
                 description: `Student enrolled in your course: ${course.title}`,
-                txHash: enrollTxHash || null,
                 timestamp: new Date()
             });
         }
@@ -3052,24 +3030,6 @@ exports.generateCertificate = async (req, res) => {
             completedDate: new Date(),
             grade: 'Pass'
         });
-
-        // ── Web3: Mint course-completion NFT ────────────────────────────
-        if (user.UserWalletAddress) {
-            try {
-                const mintResult = await nftContractService.mintCourseNFT(
-                    user.UserWalletAddress,
-                    course.title
-                );
-                if (mintResult.success) {
-                    certificate.txHash = mintResult.txHash;
-                    certificate.nftTokenId = mintResult.tokenId != null ? Number(mintResult.tokenId) : null;
-                    await certificate.save();
-                    console.log(`[generateCertificate] NFT minted → tx ${mintResult.txHash}, tokenId=${mintResult.tokenId}`);
-                }
-            } catch (nftErr) {
-                console.error('[generateCertificate] NFT mint failed (non-blocking):', nftErr.message);
-            }
-        }
 
         return res.status(201).json({
             success: true,

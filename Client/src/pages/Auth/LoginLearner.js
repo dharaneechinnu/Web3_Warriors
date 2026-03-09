@@ -3,11 +3,13 @@ import { useNavigate, Link, useLocation } from "react-router-dom"
 import styled from "styled-components"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
+import Web3 from "web3"
 import { API_BASE_URL } from '../../config';
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import AuthBackground from "../../components/ui/AuthBackground"
 import { Heading2, Paragraph, GradientSpan } from "../../components/ui/Typography"
+import { getBalance } from "../../web3/services/skillTokenService"
 
 const LoginContainer = styled.div`
   min-height: 100vh;
@@ -53,7 +55,45 @@ function LoginLearner() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [walletInfo, setWalletInfo] = useState(null); // { address, ptkn }
+  const [walletLoading, setWalletLoading] = useState(false);
   const message = location.state?.message;
+
+  // ── Connect MetaMask and show PTKN balance ──────────────────────
+  const connectWallet = async (userId) => {
+    if (!window.ethereum) return;
+    setWalletLoading(true);
+    try {
+      const w3 = new Web3(window.ethereum);
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const accounts = await w3.eth.getAccounts();
+      const address = accounts[0];
+      if (!address) return;
+
+      // Fetch PTKN balance
+      const ptkn = await getBalance(address);
+
+      // Save wallet address to localStorage under user-specific key
+      const key = userId ? `walletAddress:${userId}` : 'walletAddress';
+      localStorage.setItem(key, address);
+
+      // Save wallet address to backend (fire-and-forget)
+      const token = localStorage.getItem('token');
+      if (token && userId) {
+        axios.put(
+          `${API_BASE_URL}/User/profile/${userId}`,
+          { UserWalletAddress: address },
+          { headers: { Authorization: `Bearer ${token}` } }
+        ).catch(() => {});
+      }
+
+      setWalletInfo({ address, ptkn });
+    } catch (err) {
+      console.warn('[LoginLearner] Wallet connect skipped:', err.message);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,8 +105,10 @@ function LoginLearner() {
         localStorage.setItem('token', response.data.accessToken);
         localStorage.setItem('userId', response.data.user._id);
         localStorage.setItem('userType', 'learner');
-        // store user name for UI
-        try { localStorage.setItem('userName', response.data.user.name || response.data.user.email); } catch (e) { /* ignore */ }
+        try { localStorage.setItem('userName', response.data.user.name || response.data.user.email); } catch (_) {}
+
+        // Connect wallet in background before navigating
+        await connectWallet(response.data.user._id);
         navigate('/learner-home');
       }
     } catch (err) {
@@ -92,13 +134,44 @@ function LoginLearner() {
 
         <AnimatePresence>
           {message && <MessageContainer initial={{ opacity: 0 }} animate={{ opacity: 1 }}>{message}</MessageContainer>}
-          {error && <MessageContainer initial={{ opacity: 0 }} animate={{ opacity: 1 }}>{error}</MessageContainer>}
+          {error   && <MessageContainer initial={{ opacity: 0 }} animate={{ opacity: 1 }}>{error}</MessageContainer>}
         </AnimatePresence>
+
+        {/* Wallet connection result */}
+        {walletInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            style={{
+              background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)',
+              borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem',
+              fontSize: '0.85rem', color: '#a78bfa'
+            }}
+          >
+            🦊 Wallet connected: <strong style={{ color: '#c4b5fd' }}>
+              {walletInfo.address.slice(0, 6)}…{walletInfo.address.slice(-4)}
+            </strong>
+            <br />
+            💎 PTKN Balance: <strong style={{ color: '#fff' }}>{walletInfo.ptkn} PTKN</strong>
+            {Number(walletInfo.ptkn) === 0 && (
+              <div style={{ color: '#f59e0b', marginTop: '0.3rem', fontSize: '0.78rem' }}>
+                ⏳ 10 PTKN registration bonus will be sent to your wallet by admin.
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {walletLoading && (
+          <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '0.75rem', textAlign: 'center' }}>
+            🔄 Connecting wallet…
+          </div>
+        )}
 
         <LoginForm onSubmit={handleSubmit}>
           <Input label="Email" type="email" name="email" value={formData.email} onChange={handleInputChange} required />
           <Input label="Password" type="password" showToggle name="password" value={formData.password} onChange={handleInputChange} required />
-          <Button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Signing in & connecting wallet…' : 'Sign in'}
+          </Button>
         </LoginForm>
 
         <Paragraph style={{ textAlign: 'center', marginTop: '1.5rem' }}>

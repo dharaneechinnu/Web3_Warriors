@@ -1,8 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Web3 from "web3";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { assetUrl, API_BASE_URL } from "../../config";
+import TransactionStatus from "../../components/TransactionStatus";
+import SkillPlatformABI from "../../web3/abi/SkillPlatform.json";
+import { SKILL_PLATFORM_ADDRESS, BLOCK_EXPLORER, EXPECTED_CHAIN_ID, NETWORK_NAME, SESSION_FEE_ETH } from "../../web3/config";
+import { bookSession as web3BookSession } from "../../web3/services/skillPlatformService";
 
 /* -- helpers -- */
 const token = () => localStorage.getItem("token");
@@ -94,6 +99,40 @@ export default function BookSession() {
   const [slotsFetchError, setSlotsFetchError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Web3 state (direct initialization, no singleton service)
+  const [web3, setWeb3]           = useState(null);
+  const [account, setAccount]     = useState(null);
+  const contractRef               = useRef(null);
+
+  // Web3 transaction state
+  const [txVisible, setTxVisible] = useState(false);
+  const [txStatus, setTxStatus] = useState('wallet');
+  const [txMessage, setTxMessage] = useState('');
+  const [txHash, setTxHash] = useState('');
+
+  // ── Initialize Web3 + contract on mount ──────────────────────────
+  useEffect(() => {
+    const initWeb3 = async () => {
+      try {
+        if (!window.ethereum) return; // MetaMask not installed — silent; error shown on submit
+        const w3 = new Web3(window.ethereum);
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        const accounts = await w3.eth.getAccounts();
+        setWeb3(w3);
+        setAccount(accounts[0] || null);
+        contractRef.current = new w3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      } catch (err) {
+        console.warn("[BookSession] Web3 init skipped:", err.message);
+      }
+    };
+    initWeb3();
+
+    // Re-sync account on MetaMask account change
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", (accs) => setAccount(accs[0] || null));
+    }
+  }, []);
+
   useEffect(() => {
     if (tab === "browse")         fetchMentors();
     if (tab === "my-mentorships") fetchMySessions();
@@ -164,30 +203,121 @@ export default function BookSession() {
     }
   };
 
-  /* -- book mentorship -- */
+  /* -- book mentorship (Web3 direct + MongoDB via API) -- */
   const applyMentorship = async () => {
-    if (!topic.trim()) return setError("Please enter a topic");
-    if (!selectedSlot) return setError("Please select an available time slot");
+    if (!topic.trim())  return setError("Please enter a topic");
+    if (!selectedSlot)  return setError("Please select an available time slot");
+
+    // Guard: MetaMask must be present
+    if (!window.ethereum) {
+      return setError("MetaMask is not installed. Please install MetaMask to book a session.");
+    }
+
+    // Resolve mentor wallet (field may differ between API responses)
+    const mentorWallet = selected.walletAddress || selected.UserWalletAddress || null;
+    if (!mentorWallet) {
+      return setError("This mentor hasn't connected a wallet yet. They must link a wallet before sessions can be booked.");
+    }
+
     setSubmitting(true);
     setError(null);
-    try {
-      await api.post(`/mentorship-requests/${uid()}/send-request`, {
-        slotId: selectedSlot._id,
-        topic: topic.trim(),
-        message: message.trim()
-      }, { headers: { Authorization: `Bearer ${token()}` } });
 
-      setSuccess("\u2705 Mentorship request sent! You'll be notified once the mentor responds.");
+    // ── Step 1: Ensure MetaMask account is connected ────────────────
+    let w3 = web3;
+    let fromAccount = account;
+    try {
+      if (!w3) {
+        w3 = new Web3(window.ethereum);
+        setWeb3(w3);
+      }
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const accounts = await w3.eth.getAccounts();
+      fromAccount = accounts[0];
+      setAccount(fromAccount);
+      if (!fromAccount) throw new Error("No MetaMask account connected.");
+
+      // Ensure correct network if EXPECTED_CHAIN_ID is configured
+      const chainId = Number(await w3.eth.getChainId());
+      if (typeof EXPECTED_CHAIN_ID !== 'undefined' && EXPECTED_CHAIN_ID !== null) {
+        if (chainId !== EXPECTED_CHAIN_ID) {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: Web3.utils.toHex(EXPECTED_CHAIN_ID) }],
+          });
+        }
+      }
+
+      // Instantiate contract if not already done
+      if (!contractRef.current) {
+        contractRef.current = new w3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      }
+    } catch (err) {
+      setError(
+        err?.code === 4902
+          ? (NETWORK_NAME ? `Please add ${NETWORK_NAME} to MetaMask first.` : 'Please add the required network to MetaMask.')
+          : err.message || "Could not connect MetaMask."
+      );
+      setSubmitting(false);
+      return;
+    }
+
+    // ── Step 2: On-chain bookSession — sends exactly 1 ETH to mentor ─
+    setTxVisible(true);
+    setTxStatus('wallet');
+    setTxMessage(`Confirm payment of ${SESSION_FEE_ETH} ETH to mentor in MetaMask…`);
+    setTxHash('');
+
+    let blockchainTxHash = '';
+    let onChainBookingId = null;
+    try {
+      const { tx, bookingId } = await web3BookSession(w3, contractRef.current, fromAccount, mentorWallet);
+      blockchainTxHash = tx.transactionHash || '';
+      onChainBookingId = bookingId;
+
+      setTxStatus('pending');
+      setTxMessage('Payment confirmed on-chain! Saving your request…');
+      setTxHash(blockchainTxHash);
+    } catch (err) {
+      setTxStatus('error');
+      const msg =
+        err?.code === 4001   ? 'Transaction rejected in MetaMask.' :
+        err?.code === -32603 ? 'Contract error: must send exactly 1 ETH and mentor address must be valid.' :
+        err.message          || 'Blockchain transaction failed.';
+      setTxMessage(msg);
+      setSubmitting(false);
+      return;
+    }
+
+    // ── Step 3: Save mentorship request to MongoDB via API ──────────
+    try {
+      await api.post(
+        `/mentorship-requests/${uid()}/send-request`,
+        {
+          slotId:          selectedSlot._id,
+          topic:           topic.trim(),
+          message:         message.trim(),
+          txHash:          blockchainTxHash,
+          onChainBookingId: onChainBookingId != null ? String(onChainBookingId) : undefined,
+          sessionFee:      SESSION_FEE_ETH,
+          learnerWallet:   fromAccount,
+          mentorWallet:    mentorWallet,
+        },
+        { headers: { Authorization: `Bearer ${token()}` } }
+      );
+
+      setTxStatus('success');
+      setTxMessage(`✅ ${SESSION_FEE_ETH} ETH sent to mentor on-chain & request submitted!`);
       setSelected(null);
-      setTopic(""); 
-      setMessage(""); 
+      setTopic("");
+      setMessage("");
       setSelectedSlot(null);
       setAvailableSlots([]);
-      setTimeout(() => { setTab("my-mentorships"); fetchMySessions(); }, 1500);
+      setTimeout(() => { setTab("my-mentorships"); fetchMySessions(); }, 2000);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to send mentorship request");
-    } finally { 
-      setSubmitting(false); 
+      setTxStatus('error');
+      setTxMessage(err.response?.data?.message || 'Blockchain tx succeeded but failed to save request. Note your txHash for support.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -210,6 +340,14 @@ export default function BookSession() {
   /* -- render -- */
   return (
     <div style={S.page}>
+      <TransactionStatus
+        visible={txVisible}
+        status={txStatus}
+        message={txMessage}
+        txHash={txHash}
+        explorer={BLOCK_EXPLORER}
+        onClose={() => setTxVisible(false)}
+      />
       <div style={S.wrap}>
 
         {/* Header */}
@@ -315,6 +453,14 @@ export default function BookSession() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: "1.05rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name || "Mentor"}</div>
                       <div style={{ color: "#64748b", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}</div>
+                      {/* Wallet status */}
+                      <div style={{ marginTop: 6, fontSize: '0.78rem' }}>
+                        { (m.UserWalletAddress || m.walletAddress) ? (
+                          <span style={{ color: '#86efac' }}>🟢 Wallet: {(m.UserWalletAddress || m.walletAddress).slice(0,6)}...{(m.UserWalletAddress || m.walletAddress).slice(-4)}</span>
+                        ) : (
+                          <span style={{ color: '#fca5a5' }}>🔴 Wallet not connected</span>
+                        ) }
+                      </div>
                     </div>
                   </div>
 

@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { motion } from "framer-motion";
 import api from "../../services/api";
 import UdemyStyleQuickActions from "../../components/UdemyStyleQuickActions";
+import ConnectWallet from '../../components/ConnectWallet';
 
 // ============= STYLED COMPONENTS =============
 
@@ -615,6 +616,9 @@ const LearnerHome = () => {
           <WelcomeTitle>Welcome back, {learnerData.name}! 👋</WelcomeTitle>
           <RoleBadge>🎓 Role: Learner</RoleBadge>
           <Subtitle>Learn → Validate → Earn Credentials</Subtitle>
+          <div style={{ marginTop: 12 }}>
+            <ConnectWallet />
+          </div>
         </HeaderSection>
 
         {/* Udemy-style Learning Hub Quick Actions */}

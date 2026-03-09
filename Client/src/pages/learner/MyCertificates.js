@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../../services/api";
 import { downloadCertificate } from "../../utils/certificateGenerator";
+import { ownerOf, tokenURI, getCertificatesForUser } from "../../web3/services/certificateNFTService";
+import { BLOCK_EXPLORER } from "../../web3/config";
 
 /* ── inline style helpers ─────────────────────────────────────────────── */
 const S = {
@@ -166,8 +168,15 @@ export default function MyCertificates() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [downloading, setDownloading] = useState(null); // certId being downloaded
+  const [verifying, setVerifying] = useState(null); // certId being verified on-chain
+  const [chainData, setChainData] = useState({}); // { certId: { owner, uri, verified } }
+
+  // On-chain NFT collection (scanned from CertificateNFT contract)
+  const [nfts, setNfts] = useState([]);        // [{ tokenId, uri }]
+  const [nftLoading, setNftLoading] = useState(false);
 
   const uid = () => localStorage.getItem("userId");
+  const walletKey = uid() ? `walletAddress:${uid()}` : 'walletAddress';
 
   const showToast = (msg) => {
     setToast(msg);
@@ -190,7 +199,24 @@ export default function MyCertificates() {
     }
   }, []);
 
-  useEffect(() => { fetchCertificates(); }, [fetchCertificates]);
+  // Fetch on-chain NFTs for the connected wallet
+  const fetchNFTs = useCallback(async () => {
+    const userId = uid();
+    const key = userId ? `walletAddress:${userId}` : 'walletAddress';
+    const walletAddress = localStorage.getItem(key);
+    if (!walletAddress) return;
+    setNftLoading(true);
+    try {
+      const tokens = await getCertificatesForUser(walletAddress);
+      setNfts(tokens);
+    } catch (err) {
+      console.error("[MyCertificates] NFT fetch error:", err);
+    } finally {
+      setNftLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchCertificates(); fetchNFTs(); }, [fetchCertificates, fetchNFTs]);
 
   const handleDownload = async (cert) => {
     setDownloading(cert.certificateId);
@@ -215,6 +241,33 @@ export default function MyCertificates() {
 
   const handleVerify = (cert) => {
     navigate(`/certificate/${cert.certificateId}`);
+  };
+
+  const handleVerifyOnChain = async (cert) => {
+    if (!cert.nftTokenId && cert.nftTokenId !== 0) {
+      showToast('No NFT token ID found for this certificate.');
+      return;
+    }
+    const key = cert.certificateId;
+    setVerifying(key);
+    try {
+      const [owner, uri] = await Promise.all([
+        ownerOf(cert.nftTokenId),
+        tokenURI(cert.nftTokenId),
+      ]);
+      setChainData(prev => ({
+        ...prev,
+        [key]: { owner, uri, verified: true, error: null },
+      }));
+      showToast('✅ NFT verified on blockchain!');
+    } catch (err) {
+      setChainData(prev => ({
+        ...prev,
+        [key]: { verified: false, error: err.message || 'Verification failed' },
+      }));
+    } finally {
+      setVerifying(null);
+    }
   };
 
   if (loading) {
@@ -312,6 +365,29 @@ export default function MyCertificates() {
                       </div>
                     )}
 
+                    {/* On-chain verification result */}
+                    {chainData[cert.certificateId]?.verified && (
+                      <div style={{
+                        background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)",
+                        borderRadius: "0.5rem", padding: "0.6rem 0.75rem", marginTop: "0.5rem",
+                        fontSize: "0.78rem", color: "#86efac"
+                      }}>
+                        <div style={{ fontWeight: 700, marginBottom: "0.25rem" }}>✅ Blockchain Verified</div>
+                        <div style={{ color: "#94a3b8", wordBreak: "break-all" }}>
+                          Owner: {chainData[cert.certificateId].owner}
+                        </div>
+                      </div>
+                    )}
+                    {chainData[cert.certificateId]?.error && (
+                      <div style={{
+                        background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                        borderRadius: "0.5rem", padding: "0.6rem 0.75rem", marginTop: "0.5rem",
+                        fontSize: "0.78rem", color: "#fca5a5"
+                      }}>
+                        ⚠️ {chainData[cert.certificateId].error}
+                      </div>
+                    )}
+
                     {/* Credential ID */}
                     <div style={S.certId}>
                       🔐 {cert.certificateId}
@@ -332,11 +408,105 @@ export default function MyCertificates() {
                       <button style={S.btn("")} onClick={() => handleCopyLink(cert)}>
                         🔗 Share
                       </button>
+                      {cert.nftTokenId != null && (
+                        <button
+                          style={S.btn("")}
+                          onClick={() => handleVerifyOnChain(cert)}
+                          disabled={verifying === cert.certificateId}
+                        >
+                          {verifying === cert.certificateId ? "⏳" : "⛓️"} {verifying === cert.certificateId ? "Checking…" : "On-Chain"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
+          </div>
+        )}
+      </div>
+
+      {/* ── On-Chain NFT Section ───────────────────────────────── */}
+      <div style={{ marginTop: "3rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+          <div style={{ ...S.title, fontSize: "1.3rem" }}>⛓️ Blockchain NFT Certificates</div>
+          <button
+            style={{ ...S.btn(""), fontSize: "0.8rem", padding: "0.4rem 0.9rem" }}
+            onClick={fetchNFTs}
+            disabled={nftLoading}
+          >
+            {nftLoading ? "⏳ Scanning…" : "🔄 Refresh"}
+          </button>
+        </div>
+
+        {!localStorage.getItem(walletKey) && (
+          <div style={{ color: "#64748b", fontSize: "0.9rem", padding: "1.5rem", background: "rgba(255,255,255,0.03)", borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.07)" }}>
+            🔗 Connect your MetaMask wallet on login to view your on-chain certificate NFTs.
+          </div>
+        )}
+
+        {localStorage.getItem(walletKey) && !nftLoading && nfts.length === 0 && (
+          <div style={{ color: "#64748b", fontSize: "0.9rem", padding: "1.5rem", background: "rgba(255,255,255,0.03)", borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.07)" }}>
+            🎓 No NFT certificates found on-chain yet. Complete a course to earn one!
+          </div>
+        )}
+
+        {nfts.length > 0 && (
+          <div style={S.grid}>
+            {nfts.map(nft => (
+              <motion.div
+                key={nft.tokenId}
+                style={{ ...S.card, borderColor: "rgba(124,58,237,0.4)" }}
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              >
+                <div style={{ ...S.banner, background: "linear-gradient(135deg,#1e1b4b,#7c3aed,#06b6d4)" }}>
+                  <div style={S.bannerBadge}>NFT #{nft.tokenId}</div>
+                  <div style={S.bannerIcon}>🏅</div>
+                  <div style={S.bannerCourse}>Certificate NFT #{nft.tokenId}</div>
+                  <div style={S.bannerMentor}>⛓️ On-chain credential</div>
+                </div>
+                <div style={S.body}>
+                  {nft.uri && (
+                    <div style={S.infoRow}>
+                      <span style={S.label}>Metadata URI</span>
+                      <a
+                        href={nft.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#06b6d4", fontSize: "0.78rem", wordBreak: "break-all" }}
+                      >
+                        {nft.uri.length > 40 ? nft.uri.slice(0, 40) + "…" : nft.uri}
+                      </a>
+                    </div>
+                  )}
+                  <div style={{ ...S.certId, color: "#06b6d4", borderColor: "rgba(6,182,212,0.2)" }}>
+                    Token ID: {nft.tokenId}
+                  </div>
+                  <div style={S.actions}>
+                    <a
+                      href={`${BLOCK_EXPLORER}/token/${localStorage.getItem(walletKey)}?tab=nfts`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ ...S.btn("primary"), textDecoration: "none", fontSize: "0.82rem" }}
+                    >
+                      🔍 View on Explorer
+                    </a>
+                    <button
+                      style={S.btn("green")}
+                      onClick={() => handleVerifyOnChain({ nftTokenId: nft.tokenId, certificateId: `nft-${nft.tokenId}` })}
+                      disabled={verifying === `nft-${nft.tokenId}`}
+                    >
+                      {verifying === `nft-${nft.tokenId}` ? "⏳" : "⛓️"} Verify
+                    </button>
+                  </div>
+                  {chainData[`nft-${nft.tokenId}`]?.verified && (
+                    <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: "0.5rem", padding: "0.6rem", marginTop: "0.75rem", fontSize: "0.78rem", color: "#86efac" }}>
+                      ✅ Owner: {chainData[`nft-${nft.tokenId}`].owner?.slice(0, 10)}…
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
           </div>
         )}
       </div>

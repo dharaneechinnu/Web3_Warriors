@@ -54,9 +54,7 @@ challengeController.setIO(io);
 const courseController = require('./Controller/CourseController');
 courseController.setIO(io);
 
-// ── Web3 health check on startup ──────────────────────────────────────────────
-const { checkConnection } = require('./web3/web3Provider');
-checkConnection();
+
 
 // Socket.IO: let authenticated users join their personal notification room
 io.on('connection', (socket) => {

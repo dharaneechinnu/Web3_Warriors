@@ -1,0 +1,72 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "uint256", "name": "bookingId", "type": "uint256" },
+      { "indexed": false, "internalType": "address", "name": "learner",   "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "mentor",    "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "amount",    "type": "uint256" }
+    ],
+    "name": "SessionBooked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "address", "name": "mentor", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "MentorPaid",
+    "type": "event"
+  },
+
+  {
+    "inputs": [],
+    "name": "bookingCounter",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "name": "bookings",
+    "outputs": [
+      { "internalType": "uint256", "name": "bookingId", "type": "uint256" },
+      { "internalType": "address", "name": "learner",   "type": "address" },
+      { "internalType": "address", "name": "mentor",    "type": "address" },
+      { "internalType": "uint256", "name": "amount",    "type": "uint256" },
+      { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "address payable", "name": "mentor", "type": "address" }],
+    "name": "bookSession",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "bookingId", "type": "uint256" }],
+    "name": "getBooking",
+    "outputs": [
+      { "internalType": "address", "name": "learner",   "type": "address" },
+      { "internalType": "address", "name": "mentor",    "type": "address" },
+      { "internalType": "uint256", "name": "amount",    "type": "uint256" },
+      { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]

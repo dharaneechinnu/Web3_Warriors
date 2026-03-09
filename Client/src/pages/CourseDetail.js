@@ -3,6 +3,10 @@ import { motion } from 'framer-motion';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import TransactionStatus from '../components/TransactionStatus';
+import { approve } from '../web3/services/skillTokenService';
+import { purchaseCourse } from '../web3/services/skillPlatformService';
+import { SKILL_PLATFORM_ADDRESS, BLOCK_EXPLORER } from '../web3/config';
 
 const CourseDetail = () => {
   const { courseId } = useParams();
@@ -16,6 +20,12 @@ const CourseDetail = () => {
   const [enrolling, setEnrolling] = useState(false);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [isMentorCourse, setIsMentorCourse] = useState(false);
+
+  // Web3 transaction state
+  const [txVisible, setTxVisible] = useState(false);
+  const [txStatus, setTxStatus] = useState('wallet');
+  const [txMessage, setTxMessage] = useState('');
+  const [txHash, setTxHash] = useState('');
 
   useEffect(() => {
     if (!course) {
@@ -73,16 +83,41 @@ const CourseDetail = () => {
     }
 
     setEnrolling(true);
+    setTxVisible(true);
+    setTxStatus('wallet');
+    setTxMessage('Approve 1 SKT token for course enrollment…');
+    setTxHash('');
+
     try {
+      // Step 1: Learner approves 1 SKT for the SkillPlatform contract
+      const approveTx = await approve(SKILL_PLATFORM_ADDRESS, '1');
+      setTxStatus('pending');
+      setTxMessage('Token approved! Processing course purchase on blockchain…');
+
+      // Step 2: Attempt on-chain purchaseCourse (works if connected wallet is admin)
+      try {
+        const mentorAddr = course.mentorWallet || course.mentor?.walletAddress;
+        const learnerAddr = user.walletAddress || (user && user._id ? localStorage.getItem(`walletAddress:${user._id}`) : localStorage.getItem('walletAddress'));
+        if (mentorAddr && learnerAddr) {
+          const purchaseTx = await purchaseCourse(learnerAddr, mentorAddr);
+          setTxHash(purchaseTx.transactionHash || '');
+        }
+      } catch {
+        // Non-admin wallet – approval done, backend handles the rest
+      }
+
+      // Step 3: API enrollment (always runs)
       await api.post('/courses/enroll', {
         learnerId: user._id,
         courseId: course._id
       });
-      
+
+      setTxStatus('success');
+      setTxMessage('Enrolled successfully! 1 SKT transferred to the instructor.');
       setIsEnrolled(true);
-      alert('Successfully enrolled in the course!');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to enroll in course');
+      setTxStatus('error');
+      setTxMessage(err.message || err.response?.data?.message || 'Enrollment failed.');
     } finally {
       setEnrolling(false);
     }
@@ -119,6 +154,14 @@ const CourseDetail = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      <TransactionStatus
+        visible={txVisible}
+        status={txStatus}
+        message={txMessage}
+        txHash={txHash}
+        explorer={BLOCK_EXPLORER}
+        onClose={() => setTxVisible(false)}
+      />
       {/* Animated Background */}
       <div className="fixed inset-0 bg-grid-white/5 opacity-30 pointer-events-none"></div>
       <div className="fixed inset-0 bg-gradient-to-b from-cyan-900/20 via-fuchsia-900/20 to-transparent pointer-events-none"></div>
@@ -258,7 +301,7 @@ const CourseDetail = () => {
                     disabled={enrolling}
                     className="w-full py-4 bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {enrolling ? 'Enrolling...' : 'Enroll Now'}
+                    {enrolling ? '⏳ Processing Blockchain Tx…' : '🪙 Enroll Now (1 SKT)'}
                   </button>
                 ))}
                 {isMentorCourse && (

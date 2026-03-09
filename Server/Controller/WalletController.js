@@ -1,6 +1,4 @@
 const User = require('../Model/UserModel');
-const tokenContractService = require('../web3/tokenContract');
-const nftContractService = require('../web3/nftContract');
 
 // GET /wallet/:userId - Get wallet data (balance + transaction history)
 exports.getWallet = async (req, res) => {
@@ -22,13 +20,6 @@ exports.getWallet = async (req, res) => {
             .filter(t => t.transactionType === 'spend')
             .reduce((sum, t) => sum + t.amount, 0);
 
-        // Fetch on-chain balance if wallet address exists
-        let onChainBalance = null;
-        if (user.UserWalletAddress) {
-            const balResult = await tokenContractService.getBalance(user.UserWalletAddress);
-            if (balResult.success) onChainBalance = balResult.balance;
-        }
-
         res.json({
             success: true,
             wallet: {
@@ -37,7 +28,6 @@ exports.getWallet = async (req, res) => {
                 email: user.email,
                 walletAddress: user.UserWalletAddress || null,
                 balance: user.tokenBalance || 0,
-                onChainBalance,
                 totalEarned,
                 totalSpent,
                 transactions: sorted
@@ -107,65 +97,14 @@ exports.transferTokens = async (req, res) => {
     }
 };
 
-// GET /wallet/token-balance/:userId - On-chain token balance only
+// GET /wallet/token-balance/:userId - On-chain balance (handled by frontend via MetaMask)
 exports.getOnChainBalance = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const user = await User.findById(userId).select('UserWalletAddress name email');
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-        if (!user.UserWalletAddress) {
-            return res.status(400).json({ success: false, message: 'User has no wallet address' });
-        }
-
-        const balResult = await tokenContractService.getBalance(user.UserWalletAddress);
-        if (!balResult.success) {
-            return res.status(500).json({ success: false, message: balResult.error });
-        }
-
-        res.json({
-            success: true,
-            userId: user._id,
-            walletAddress: user.UserWalletAddress,
-            onChainBalance: balResult.balance
-        });
-    } catch (error) {
-        console.error('getOnChainBalance error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
+    res.json({ success: true, message: 'On-chain balance is now handled client-side via MetaMask' });
 };
 
-// GET /wallet/nfts/:userId - Get user's NFTs from blockchain
+// GET /wallet/nfts/:userId - NFTs (handled by frontend via MetaMask)
 exports.getUserNFTs = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const user = await User.findById(userId).select('UserWalletAddress');
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-        if (!user.UserWalletAddress) {
-            return res.json({ success: true, nfts: [] });
-        }
-
-        const nftResult = await nftContractService.getUserNFTs(user.UserWalletAddress);
-        if (!nftResult.success) {
-            return res.status(500).json({ success: false, message: nftResult.error });
-        }
-
-        // Fetch metadata for each NFT
-        const nfts = [];
-        for (const tokenId of nftResult.tokenIds) {
-            const metaResult = await nftContractService.getNftMeta(tokenId);
-            nfts.push({
-                tokenId,
-                ...(metaResult.success ? metaResult.meta : {})
-            });
-        }
-
-        res.json({ success: true, nfts });
-    } catch (error) {
-        console.error('getUserNFTs error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
+    res.json({ success: true, message: 'NFT queries are now handled client-side via MetaMask', nfts: [] });
 };
 
 // GET /wallet/earnings/:userId - Get earnings breakdown by source

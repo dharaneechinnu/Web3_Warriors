@@ -3,7 +3,6 @@ const User = require('../Model/UserModel');
 const { v4: uuidv4 } = require('uuid');
 const emailService = require('../services/emailService');
 const notifService = require('../services/notificationService');
-const tokenContractService = require('../web3/tokenContract');
 
 // Socket.IO instance — set from Server.js via setIO()
 let io = null;
@@ -123,34 +122,12 @@ exports.bookSession = async (req, res) => {
             });
         }
 
-        // ── Web3: On-chain mentorship transfer ─────────────────────────────
-        const mentor = await User.findById(session.mentorId);
-        let bookingTxHash = null;
-        if (learner.UserWalletAddress && mentor?.UserWalletAddress) {
-            const txResult = await tokenContractService.transferForMentorship(
-                learner.UserWalletAddress,
-                mentor.UserWalletAddress,
-                session.price
-            );
-            if (!txResult.success) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Blockchain transfer failed: ${txResult.error}`
-                });
-            }
-            bookingTxHash = txResult.txHash;
-            console.log(`[bookSession] On-chain mentorship transfer tx: ${bookingTxHash}`);
-        } else {
-            console.warn('[bookSession] Missing wallet address — skipping on-chain transfer');
-        }
-
         // Hold tokens (deduct now, payout to mentor on completion)
         learner.tokenBalance -= session.price;
         learner.transactionHistory.push({
             transactionType: 'spend',
             amount: session.price,
             description: `Session booking: ${session.title} with ${session.mentorName}`,
-            txHash: bookingTxHash || null,
             timestamp: new Date()
         });
         await learner.save();

@@ -4,8 +4,7 @@ const notifService = require('../services/notificationService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const tokenContractService = require('../web3/tokenContract');
-const nftContractService = require('../web3/nftContract');
+
 
 // io reference (set from Server.js)
 let io = null;
@@ -382,29 +381,6 @@ exports.distributeRewards = async (req, res) => {
 
                 const learner = await User.findById(sub.learnerId);
                 if (learner) {
-                    // ── Web3: reward tokens on-chain ───────────────────────
-                    if (learner.UserWalletAddress) {
-                        const rwResult = await tokenContractService.rewardUser(
-                            learner.UserWalletAddress,
-                            tokens,
-                            `Challenge reward: ${challenge.title} (Rank #${sub.rank})`
-                        );
-                        if (rwResult.success) {
-                            sub.rewardTxHash = rwResult.txHash;
-                        }
-
-                        // Mint challenge-winner NFT for rank #1
-                        if (sub.rank === 1) {
-                            const nftResult = await nftContractService.mintChallengeNFT(
-                                learner.UserWalletAddress,
-                                challenge.title
-                            );
-                            if (nftResult.success) {
-                                console.log(`[distributeRewards] Challenge NFT minted → tokenId=${nftResult.tokenId}`);
-                            }
-                        }
-                    }
-
                     learner.tokenBalance = (learner.tokenBalance || 0) + tokens;
                     learner.transactionHistory.push({
                         transactionType: 'earn',

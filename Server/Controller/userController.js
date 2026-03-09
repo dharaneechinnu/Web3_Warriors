@@ -11,7 +11,7 @@ const getMentors = async (req, res) => {
     const approvedUserIds = approvedApps.map(a => a.userId);
 
     const mentors = await User.find({ role: 'mentor', _id: { $in: approvedUserIds } })
-      .select('name email skills bio experience averageRating ratings profileImage')
+      .select('name email skills bio experience averageRating ratings profileImage UserWalletAddress tokenBalance')
       .sort({ averageRating: -1 });
     console.log(`[getMentors] Found ${mentors.length} approved mentors (out of all with mentor role)`);
     res.json({ success: true, mentors });
