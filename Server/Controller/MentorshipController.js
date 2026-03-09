@@ -5,6 +5,7 @@ const User = require('../Model/UserModel');
 const { v4: uuidv4 } = require('uuid');
 const emailService = require('../services/emailService');
 const notifService = require('../services/notificationService');
+const { verifyBookingTransaction } = require('../web3/platformContract');
 
 let io = null;
 exports.setIO = (socketIO) => { io = socketIO; };
@@ -12,7 +13,9 @@ exports.setIO = (socketIO) => { io = socketIO; };
 // ── LEARNER SENDS MENTORSHIP REQUEST ───────────────────────────────────────────
 exports.sendMentorshipRequest = async (req, res) => {
     try {
-        const { slotId, topic, message } = req.body;
+        // txHash, onChainBookingId, priceWei are optional — sent by the frontend
+        // AFTER the MetaMask bookSession() transaction succeeds.
+        const { slotId, topic, message, txHash, onChainBookingId, priceWei } = req.body;
         const learnerId = req.params.learnerId || req.body.learnerId;
 
         if (!slotId || !topic || !learnerId) {
@@ -28,6 +31,15 @@ exports.sendMentorshipRequest = async (req, res) => {
             return res.status(404).json({ 
                 success: false, 
                 message: 'Learner not found' 
+            });
+        }
+
+        // Check learner has enough coins for booking fee (1 coin)
+        const BOOKING_FEE = 1;
+        if ((learner.tokenBalance || 0) < BOOKING_FEE) {
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient coins. Booking a session costs ${BOOKING_FEE} coin, but you only have ${learner.tokenBalance || 0}.`
             });
         }
 
@@ -62,13 +74,35 @@ exports.sendMentorshipRequest = async (req, res) => {
         }
 
         // Create mentorship request
+        // If a txHash was sent, verify it on-chain before trusting it
+        let verifiedTxHash = null;
+        let verifiedBookingId = null;
+        let verifiedPriceWei = null;
+
+        if (txHash) {
+            const learner = await User.findById(learnerId);
+            const verification = await verifyBookingTransaction(txHash, learner?.UserWalletAddress);
+            if (verification.success) {
+                verifiedTxHash     = txHash;
+                verifiedBookingId  = verification.bookingId;
+                verifiedPriceWei   = verification.amountPaid;
+            } else {
+                console.warn(`[MentorshipController] txHash verification failed: ${verification.error}`);
+                // Don't reject the request — just don't save unverified on-chain data
+            }
+        }
+
         const request = new MentorshipRequest({
             mentorId: slot.mentorId,
             learnerId,
             slotId,
             topic,
             message: message || '',
-            status: 'pending'
+            status: 'pending',
+            // Web3 on-chain payment fields (only saved after on-chain verification)
+            ...(verifiedTxHash    && { txHash: verifiedTxHash }),
+            ...(verifiedBookingId != null && { onChainBookingId: verifiedBookingId }),
+            ...(verifiedPriceWei  && { priceWei: verifiedPriceWei })
         });
 
         await request.save();
@@ -78,6 +112,42 @@ exports.sendMentorshipRequest = async (req, res) => {
         slot.mentorshipRequestId = request._id;
         slot.updatedAt = new Date();
         await slot.save();
+
+        // ── Coin transfer: deduct 1 coin from learner → credit 1 coin to mentor ──
+        let coinTxResult = null;
+        try {
+            const BOOKING_FEE = 1;
+            const mentorForCoin = await User.findById(slot.mentorId._id || slot.mentorId);
+            if (mentorForCoin) {
+                learner.tokenBalance = (learner.tokenBalance || 0) - BOOKING_FEE;
+                learner.transactionHistory.push({
+                    transactionType: 'spend',
+                    amount: BOOKING_FEE,
+                    description: `Session booking fee for mentor ${mentorForCoin.name || 'Mentor'}`,
+                    timestamp: new Date()
+                });
+                await learner.save();
+
+                mentorForCoin.tokenBalance = (mentorForCoin.tokenBalance || 0) + BOOKING_FEE;
+                mentorForCoin.transactionHistory.push({
+                    transactionType: 'earn',
+                    amount: BOOKING_FEE,
+                    description: `Session booking fee from ${learner.name || 'Learner'}`,
+                    timestamp: new Date()
+                });
+                await mentorForCoin.save();
+
+                coinTxResult = {
+                    coinsDeducted: BOOKING_FEE,
+                    learnerBalance: learner.tokenBalance,
+                    mentorName: mentorForCoin.name
+                };
+                console.log(`[MentorshipController] Coin transfer: 1 coin from ${learner.name} → ${mentorForCoin.name}`);
+            }
+        } catch (coinErr) {
+            // Non-fatal: log and continue — the booking request has already been saved
+            console.error('[MentorshipController] Coin transfer failed:', coinErr.message);
+        }
 
         // Emit real-time notification to mentor
         if (io) {
@@ -120,7 +190,8 @@ exports.sendMentorshipRequest = async (req, res) => {
         res.status(201).json({ 
             success: true, 
             message: 'Mentorship request sent successfully',
-            request 
+            request,
+            ...(coinTxResult && { coinTransaction: coinTxResult })
         });
     } catch (error) {
         console.error('sendMentorshipRequest error:', error);
@@ -253,7 +324,10 @@ exports.acceptMentorshipRequest = async (req, res) => {
             slotId: slot._id,
             mentorshipRequestId: request._id,
             status: 'confirmed',
-            learnerMessage: request.message
+            learnerMessage: request.message,
+            // Carry over on-chain escrow fields so SessionManagement can call confirmSession/cancelSession
+            ...(request.txHash           && { txHash: request.txHash }),
+            ...(request.onChainBookingId != null && { onChainBookingId: request.onChainBookingId })
         });
 
         await session.save();
@@ -417,6 +491,73 @@ exports.getLearnerRequests = async (req, res) => {
             requests 
         });
     } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ── CONFIRM ON-CHAIN PAYMENT ───────────────────────────────────────────────────
+// Called by the learner's frontend AFTER the MetaMask bookSession() transaction
+// succeeds.  Saves txHash + onChainBookingId to an existing pending request.
+//
+// POST /mentorship-requests/:requestId/confirm-payment
+// Body: { txHash, onChainBookingId, priceWei, learnerId }
+exports.confirmOnChainPayment = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { txHash, onChainBookingId, priceWei, learnerId } = req.body;
+
+        if (!txHash || onChainBookingId == null) {
+            return res.status(400).json({
+                success: false,
+                message: 'txHash and onChainBookingId are required'
+            });
+        }
+
+        const request = await MentorshipRequest.findById(requestId);
+        if (!request) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        if (learnerId && request.learnerId.toString() !== learnerId) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        if (request.status !== 'pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment can only be confirmed for a pending request'
+            });
+        }
+
+        request.txHash = txHash;
+        request.onChainBookingId = Number(onChainBookingId);
+        if (priceWei) request.priceWei = priceWei.toString();
+        await request.save();
+
+        if (io) {
+            io.to(`mentor_${request.mentorId}`).emit('booking_payment_confirmed', {
+                requestId,
+                txHash,
+                onChainBookingId: Number(onChainBookingId)
+            });
+        }
+
+        await notifService.createNotification({
+            userId: request.mentorId,
+            type: 'booking_request',
+            title: '💰 Payment Locked On-Chain',
+            message: `Payment is secured in escrow for "${request.topic}". Review and accept the session.`,
+            metadata: { requestId, txHash, onChainBookingId: Number(onChainBookingId) }
+        }, io);
+
+        res.json({
+            success: true,
+            message: 'On-chain payment confirmed and saved',
+            txHash,
+            onChainBookingId: Number(onChainBookingId)
+        });
+    } catch (error) {
+        console.error('confirmOnChainPayment error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

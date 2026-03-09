@@ -3058,7 +3058,9 @@ exports.generateCertificate = async (req, res) => {
             try {
                 const mintResult = await nftContractService.mintCourseNFT(
                     user.UserWalletAddress,
-                    course.title
+                    courseId,
+                    course.title,
+                    mentorName
                 );
                 if (mintResult.success) {
                     certificate.txHash = mintResult.txHash;

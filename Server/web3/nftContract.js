@@ -1,84 +1,90 @@
-/**
- * ERC-721 NFT Contract wrapper
- * ─────────────────────────────
- * Mints course-completion and challenge-winner NFTs.
- * Every method returns   { success, txHash?, tokenId?, error? }
+﻿/**
+ * nftContract.js
+ * Backend wrapper for SkillPlatform NFT certificate minting (web3.js v4).
  */
-const { web3, adminAccount } = require('./web3Provider');
-const { NFT_CONTRACT_ADDRESS } = require('./contractAddress');
-const nftAbi = require('./abi/nftAbi.json');
 
-const GAS = 600_000;
+const { getWeb3, getAdminAddress } = require('./web3Provider');
+const path = require('path');
+const fs   = require('fs');
 
-// ── Contract instance ────────────────────────────────────────────────────────
-const nftContract = new web3.eth.Contract(nftAbi, NFT_CONTRACT_ADDRESS);
+const artifactPath = path.join(__dirname, '../../build/contracts/SkillPlatform.json');
+let CONTRACT_ABI = [];
+try {
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    CONTRACT_ABI = artifact.abi;
+} catch (err) {
+    console.error('[nftContract] Could not load SkillPlatform ABI:', err.message);
+}
 
-// ── Mint course-completion NFT ───────────────────────────────────────────────
-async function mintCourseNFT(userWallet, courseName) {
+const CONTRACT_ADDRESS = process.env.SKILL_PLATFORM_ADDRESS || '0xf2183627A41c24543b3046A2C89e7bD2dEBaDFc7';
+
+let _contract = null;
+function getContract() {
+    if (!_contract) {
+        const web3 = getWeb3();
+        _contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+    }
+    return _contract;
+}
+
+/**
+ * Mint a soulbound course-completion NFT certificate.
+ * @returns {{ success: boolean, txHash?: string, tokenId?: number, error?: string }}
+ */
+async function mintCourseNFT(learnerWallet, courseId, courseName, mentorName = 'Instructor', metadataURI = '') {
     try {
-        const tx = await nftContract.methods
-            .mintCourseNFT(userWallet, courseName)
-            .send({ from: adminAccount, gas: GAS });
+        if (!learnerWallet || !courseId || !courseName) {
+            return { success: false, error: 'learnerWallet, courseId, and courseName are required' };
+        }
+        const uri      = metadataURI || ('ipfs://placeholder/' + courseId);
+        const contract = getContract();
+        const from     = getAdminAddress();
 
-        // Extract tokenId from the CourseCertMinted event
-        const tokenId = tx.events?.CourseCertMinted?.returnValues?.tokenId ?? null;
-        console.log(`[nftContract] mintCourseNFT → tx ${tx.transactionHash}  tokenId=${tokenId}`);
-        return { success: true, txHash: tx.transactionHash, tokenId };
+        const receipt = await contract.methods.mintCertificate(
+            learnerWallet,
+            courseId.toString(),
+            courseName,
+            mentorName,
+            uri
+        ).send({ from, gas: 400000 });
+
+        let tokenId = null;
+        const event = receipt.events && receipt.events.CertificateMinted;
+        if (event && event.returnValues) {
+            tokenId = Number(event.returnValues.tokenId);
+        }
+
+        console.log('[nftContract] mintCourseNFT - tx: ' + receipt.transactionHash + ', tokenId: ' + tokenId);
+        return { success: true, txHash: receipt.transactionHash, tokenId };
     } catch (err) {
-        console.error('[nftContract] mintCourseNFT error:', err.message);
+        console.error('[nftContract] mintCourseNFT failed:', err.message);
         return { success: false, error: err.message };
     }
 }
 
-// ── Mint challenge-winner NFT ────────────────────────────────────────────────
-async function mintChallengeNFT(userWallet, challengeName) {
+/**
+ * Verify a certificate on-chain (read-only).
+ */
+async function verifyCertificate(tokenId) {
     try {
-        const tx = await nftContract.methods
-            .mintChallengeNFT(userWallet, challengeName)
-            .send({ from: adminAccount, gas: GAS });
-
-        const tokenId = tx.events?.ChallengeCertMinted?.returnValues?.tokenId ?? null;
-        console.log(`[nftContract] mintChallengeNFT → tx ${tx.transactionHash}  tokenId=${tokenId}`);
-        return { success: true, txHash: tx.transactionHash, tokenId };
-    } catch (err) {
-        console.error('[nftContract] mintChallengeNFT error:', err.message);
-        return { success: false, error: err.message };
-    }
-}
-
-// ── Get user's NFT token IDs ─────────────────────────────────────────────────
-async function getUserNFTs(userWallet) {
-    try {
-        const ids = await nftContract.methods.getUserNFTs(userWallet).call();
-        return { success: true, tokenIds: ids.map(id => Number(id)) };
-    } catch (err) {
-        console.error('[nftContract] getUserNFTs error:', err.message);
-        return { success: false, error: err.message };
-    }
-}
-
-// ── Get NFT metadata ─────────────────────────────────────────────────────────
-async function getNftMeta(tokenId) {
-    try {
-        const meta = await nftContract.methods.nftMeta(tokenId).call();
+        const contract = getContract();
+        const result   = await contract.methods.verifyCertificate(tokenId).call();
+        const [learner, courseId, courseName, mentorName, issuedAt, metadataURI] = result;
         return {
             success: true,
-            meta: {
-                name: meta.name,
-                category: meta.category,
-                mintedAt: Number(meta.mintedAt),
-            },
+            data: {
+                tokenId:     Number(tokenId),
+                learner,
+                courseId,
+                courseName,
+                mentorName,
+                issuedAt:    new Date(Number(issuedAt) * 1000).toISOString(),
+                metadataURI
+            }
         };
     } catch (err) {
-        console.error('[nftContract] getNftMeta error:', err.message);
         return { success: false, error: err.message };
     }
 }
 
-module.exports = {
-    nftContract,
-    mintCourseNFT,
-    mintChallengeNFT,
-    getUserNFTs,
-    getNftMeta,
-};
+module.exports = { mintCourseNFT, verifyCertificate };

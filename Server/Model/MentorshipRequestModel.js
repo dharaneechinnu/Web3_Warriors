@@ -46,6 +46,22 @@ const MentorshipRequestSchema = new mongoose.Schema({
     updatedAt: { 
         type: Date, 
         default: Date.now 
+    },
+    // ── Web3 / on-chain fields ──────────────────────────────────────────────
+    /// Booking ID returned by the SkillPlatform.bookSession() transaction
+    onChainBookingId: {
+        type: Number,
+        default: null
+    },
+    /// Ethereum transaction hash of the bookSession() call
+    txHash: {
+        type: String,
+        default: null
+    },
+    /// Session price in wei at the time of booking (for reference / refund display)
+    priceWei: {
+        type: String,
+        default: null
     }
 });
 

@@ -3,6 +3,9 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { getMyApplication } from "../../services/mentorApplicationService";
+import { Web3 } from 'web3';
+import SkillPlatformABI from '../../web3/abi/SkillPlatformABI.json';
+import { SKILL_PLATFORM_ADDRESS } from '../../services/contractAddress';
 
 /* -- helpers -- */
 const tok = () => localStorage.getItem("token");
@@ -107,6 +110,11 @@ const SessionManagement = () => {
   const [slotSuccess, setSlotSuccess] = useState(null);
   const [selectedSlots, setSelectedSlots] = useState(new Set());
   const [bulkDeleting, setBulkDeleting]   = useState(false);
+
+  /* -- Web3 on-chain state -- */
+  const [registering, setRegistering]       = useState(null);   // slotId currently being registered on-chain
+  const [onChainPrices, setOnChainPrices]   = useState({});     // slotId -> ethPrice string
+  const [web3TxMsg, setWeb3TxMsg]           = useState(null);   // { type:'success'|'error', text }
 
   /* -- fetch all mentor sessions -- */
   const fetchAll = useCallback(async () => {
@@ -264,6 +272,62 @@ const SessionManagement = () => {
   const toggleSelectAll      = () =>
     setSelectedSlots(allAvailableSelected ? new Set() : new Set(availableSlots.map(sl => sl._id)));
 
+  /* -- Web3: register a slot on-chain with a price so learners can pay ETH -- */
+  const registerSlotOnChain = async (slot) => {
+    if (!window.ethereum) return setWeb3TxMsg({ type: 'error', text: '🦊 MetaMask is not installed. Install it to enable ETH payments.' });
+    // eslint-disable-next-line no-alert
+    const ethPrice = window.prompt('Enter session price in ETH (e.g. 0.01):');
+    if (!ethPrice || isNaN(parseFloat(ethPrice)) || parseFloat(ethPrice) <= 0) return;
+    setRegistering(slot._id);
+    setWeb3TxMsg(null);
+    try {
+      const web3 = new Web3(window.ethereum);
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const contract = new web3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      const priceWei = web3.utils.toWei(ethPrice, 'ether');
+      const receipt = await contract.methods.createSession(slot._id, priceWei).send({ from: accounts[0] });
+      setOnChainPrices(prev => ({ ...prev, [slot._id]: ethPrice }));
+      setWeb3TxMsg({ type: 'success', text: `⛓ Slot registered on-chain! Learners will pay ${ethPrice} ETH to book. TX: ${receipt.transactionHash.slice(0, 18)}…` });
+    } catch (err) {
+      if (err.code === 4001 || err.message?.includes('User denied')) {
+        setWeb3TxMsg({ type: 'error', text: '❌ MetaMask transaction cancelled.' });
+      } else {
+        setWeb3TxMsg({ type: 'error', text: `⚠️ On-chain registration failed: ${err.message}` });
+      }
+    } finally {
+      setRegistering(null);
+    }
+  };
+
+  /* -- Web3: mentor confirms session → releases ETH escrow to mentor wallet -- */
+  const confirmSessionOnChain = async (bookingId) => {
+    if (bookingId == null || !window.ethereum) return;
+    try {
+      const web3 = new Web3(window.ethereum);
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const contract = new web3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      await contract.methods.confirmSession(bookingId).send({ from: accounts[0] });
+      setSuccess(prev => (prev || '') + ' ⛓ ETH escrow released to your wallet!');
+    } catch (err) {
+      if (err.code !== 4001 && !err.message?.includes('User denied')) {
+        console.warn('[SessionManagement] confirmSession on-chain failed:', err.message);
+      }
+    }
+  };
+
+  /* -- Web3: cancel booking → refunds ETH to learner -- */
+  const cancelSessionOnChain = async (bookingId) => {
+    if (bookingId == null || !window.ethereum) return;
+    try {
+      const web3 = new Web3(window.ethereum);
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const contract = new web3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      await contract.methods.cancelSession(bookingId).send({ from: accounts[0] });
+    } catch (err) {
+      console.warn('[SessionManagement] cancelSession on-chain failed:', err.message);
+    }
+  };
+
   /* -- accept request -- */
   const acceptRequest = async (session) => {
     try {
@@ -281,6 +345,7 @@ const SessionManagement = () => {
 
   /* -- reject request -- */
   const rejectRequest = async (session) => {
+    // eslint-disable-next-line no-alert
     const reason = window.prompt("Reason for declining (optional):") || "";
     try {
       await api.patch(`/sessions/reject-request/${session._id}`, {
@@ -289,6 +354,10 @@ const SessionManagement = () => {
       }, { headers: { Authorization: `Bearer ${tok()}` } });
       setSuccess("Request declined.");
       fetchAll();
+      // If this booking was paid on-chain, cancel it so learner gets refunded
+      if (session?.onChainBookingId != null) {
+        await cancelSessionOnChain(session.onChainBookingId);
+      }
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to reject request");
@@ -311,10 +380,15 @@ const SessionManagement = () => {
 
   /* -- mark complete -- */
   const markComplete = async (id) => {
+    const session = all.find(s => s._id === id);
     try {
       await api.patch(`/sessions/complete/${id}`, { mentorId }, { headers: { Authorization: `Bearer ${tok()}` } });
       setSuccess("Session marked as completed!");
       fetchAll();
+      // If ETH was held in escrow, release it to the mentor wallet via MetaMask
+      if (session?.onChainBookingId != null) {
+        await confirmSessionOnChain(session.onChainBookingId);
+      }
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to complete session");
@@ -606,6 +680,7 @@ const SessionManagement = () => {
           <>
             {slotError   && <div style={S.alert("error")}>{slotError}</div>}
             {slotSuccess && <div style={S.alert("success")}>{slotSuccess}</div>}
+            {web3TxMsg   && <div style={S.alert(web3TxMsg.type === 'success' ? 'success' : 'error')}>{web3TxMsg.text}</div>}
 
             {/* Create Slot Form */}
             <motion.div
@@ -786,10 +861,24 @@ const SessionManagement = () => {
                         </div>
 
                         {isAvail && !isSelected && (
-                          <button onClick={() => handleDeleteSlot(slot._id)}
-                            style={{ ...S.btn("danger"), width: "100%", marginTop: "0.65rem", fontSize: "0.8rem" }}>
-                            🗑️ Delete
-                          </button>
+                          <>
+                            <button onClick={() => handleDeleteSlot(slot._id)}
+                              style={{ ...S.btn("danger"), width: "100%", marginTop: "0.65rem", fontSize: "0.8rem" }}>
+                              🗑️ Delete
+                            </button>
+                            {window.ethereum && (
+                              <button
+                                onClick={() => registerSlotOnChain(slot)}
+                                disabled={registering === slot._id}
+                                style={{ ...S.btn("primary"), width: "100%", marginTop: "0.45rem", fontSize: "0.78rem", opacity: registering === slot._id ? 0.65 : 1 }}>
+                                {registering === slot._id
+                                  ? "⏳ Registering…"
+                                  : onChainPrices[slot._id]
+                                    ? `⛓ On-Chain (${onChainPrices[slot._id]} ETH)`
+                                    : "⛓ Register On-Chain"}
+                              </button>
+                            )}
+                          </>
                         )}
                         {isAvail && isSelected && (
                           <div style={{ textAlign: "center", fontSize: "0.78rem", color: "#f87171", marginTop: "0.5rem", padding: "0.35rem", background: "rgba(239,68,68,0.09)", borderRadius: "0.4rem" }}>

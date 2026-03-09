@@ -21,4 +21,8 @@ router.patch('/:requestId/reject', authMiddleware, mentorshipController.rejectMe
 // ── GET LEARNER'S REQUESTS ────────────────────────────────────────────────────
 router.get('/learner/:learnerId/requests', authMiddleware, mentorshipController.getLearnerRequests);
 
+// ── CONFIRM ON-CHAIN PAYMENT (Web3) ──────────────────────────────────────────
+// Called by frontend after MetaMask bookSession() tx succeeds
+router.post('/:requestId/confirm-payment', authMiddleware, mentorshipController.confirmOnChainPayment);
+
 module.exports = router;

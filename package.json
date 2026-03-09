@@ -1,0 +1,20 @@
+{
+  "name": "skillplatform-contracts",
+  "version": "1.0.0",
+  "description": "SkillPlatform Solidity smart contracts — Truffle + Ganache setup",
+  "private": true,
+  "scripts": {
+    "compile": "truffle compile",
+    "migrate": "truffle migrate --network development --reset",
+    "test": "truffle test --network development",
+    "console": "truffle console --network development",
+    "migrate:amoy": "truffle migrate --network amoy --reset"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "4.9.6"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0",
+    "truffle": "^5.11.0"
+  }
+}

@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../../services/api";
 import { downloadCertificate } from "../../utils/certificateGenerator";
+import { Web3 } from 'web3';
+import SkillPlatformABI from '../../web3/abi/SkillPlatformABI.json';
+import { SKILL_PLATFORM_ADDRESS } from '../../services/contractAddress';
 
 /* ── inline style helpers ─────────────────────────────────────────────── */
 const S = {
@@ -135,6 +138,8 @@ const S = {
     fontWeight: 600,
     fontSize: "0.9rem",
     zIndex: 2000,
+    maxWidth: "min(480px, 90vw)",
+    wordBreak: "break-word",
   },
   backBtn: {
     display: "inline-flex",
@@ -166,6 +171,7 @@ export default function MyCertificates() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [downloading, setDownloading] = useState(null); // certId being downloaded
+  const [verifyingOnChain, setVerifyingOnChain] = useState(null); // tokenId being verified
 
   const uid = () => localStorage.getItem("userId");
 
@@ -215,6 +221,26 @@ export default function MyCertificates() {
 
   const handleVerify = (cert) => {
     navigate(`/certificate/${cert.certificateId}`);
+  };
+
+  const handleVerifyOnChain = async (cert) => {
+    if (!cert.nftTokenId) return;
+    setVerifyingOnChain(cert.nftTokenId);
+    try {
+      const provider = window.ethereum
+        ? window.ethereum
+        : 'http://127.0.0.1:7545'; // Ganache fallback (read-only)
+      const web3 = new Web3(provider);
+      const contract = new web3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+      const result = await contract.methods.verifyCertificate(cert.nftTokenId).call();
+      const [learner, , courseName, mentorName, issuedAt] = result;
+      const date = new Date(Number(issuedAt) * 1000).toLocaleDateString();
+      showToast(`✅ On-chain verified! Course: ${courseName} · Mentor: ${mentorName} · Issued: ${date} · Holder: ${learner.slice(0, 8)}…`);
+    } catch (err) {
+      showToast('⚠️ On-chain verification failed: ' + err.message);
+    } finally {
+      setVerifyingOnChain(null);
+    }
   };
 
   if (loading) {
@@ -308,7 +334,14 @@ export default function MyCertificates() {
                     {cert.nftTokenId != null && (
                       <div style={S.infoRow}>
                         <span style={S.label}>NFT Token</span>
-                        <span style={{ ...S.value, color: "#a78bfa" }}>#{cert.nftTokenId}</span>
+                        <span style={{
+                          ...S.value, color: "#a78bfa",
+                          background: "rgba(124,58,237,0.12)",
+                          padding: "0.15rem 0.5rem", borderRadius: "0.4rem", fontSize: "0.78rem",
+                          fontFamily: "monospace"
+                        }}>
+                          ⛓ #{cert.nftTokenId}
+                        </span>
                       </div>
                     )}
 
@@ -329,6 +362,15 @@ export default function MyCertificates() {
                       <button style={S.btn("green")} onClick={() => handleVerify(cert)}>
                         👁 View
                       </button>
+                      {cert.nftTokenId != null && (
+                        <button
+                          style={{ ...S.btn("green"), background: "rgba(124,58,237,0.15)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.3)" }}
+                          onClick={() => handleVerifyOnChain(cert)}
+                          disabled={verifyingOnChain === cert.nftTokenId}
+                        >
+                          {verifyingOnChain === cert.nftTokenId ? "⏳" : "⛓"} On-Chain
+                        </button>
+                      )}
                       <button style={S.btn("")} onClick={() => handleCopyLink(cert)}>
                         🔗 Share
                       </button>

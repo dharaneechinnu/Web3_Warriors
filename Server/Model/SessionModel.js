@@ -28,6 +28,10 @@ const SessionSchema = new mongoose.Schema({
     slotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MentorSlot', default: null }, // linked slot
     mentorshipRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MentorshipRequest', default: null }, // request that created this
 
+    // ── Web3 on-chain escrow fields ────────────────────────────────────────────
+    onChainBookingId: { type: Number, default: null }, // bookingId from bookSession() event
+    txHash:           { type: String, default: null }, // learner's booking transaction hash
+
     // ── Learner-initiated request ──────────────────────────────────────────────
     requestedTimes: [{ type: Date }],           // preferred slots sent by learner
     learnerMessage: { type: String, default: '' }, // learner's request message

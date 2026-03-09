@@ -3,6 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { assetUrl, API_BASE_URL } from "../../config";
+import { Web3 } from 'web3';
+import SkillPlatformABI from '../../web3/abi/SkillPlatformABI.json';
+import { SKILL_PLATFORM_ADDRESS } from '../../services/contractAddress';
 
 /* -- helpers -- */
 const token = () => localStorage.getItem("token");
@@ -93,12 +96,25 @@ export default function BookSession() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsFetchError, setSlotsFetchError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // Web3 payment tracking
+  const [paymentStatus, setPaymentStatus] = useState(null); // null | 'paying' | 'paid' | 'skipped'
+  const [coinBalance, setCoinBalance] = useState(null);
 
   useEffect(() => {
     if (tab === "browse")         fetchMentors();
     if (tab === "my-mentorships") fetchMySessions();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        const res = await api.get(`/wallet/${uid()}`, { headers: { Authorization: `Bearer ${token()}` } });
+        setCoinBalance(res.data.balance ?? res.data.tokenBalance ?? null);
+      } catch { /* non-critical */ }
+    };
+    fetchBalance();
+  }, []);
 
   /* -- fetch -- */
   const fetchMentors = async () => {
@@ -164,30 +180,82 @@ export default function BookSession() {
     }
   };
 
-  /* -- book mentorship -- */
+  /* -- book mentorship (with optional MetaMask ETH escrow payment) -- */
   const applyMentorship = async () => {
     if (!topic.trim()) return setError("Please enter a topic");
     if (!selectedSlot) return setError("Please select an available time slot");
     setSubmitting(true);
     setError(null);
+    setPaymentStatus(null);
+
+    let txHash = null;
+    let onChainBookingId = null;
+    let priceWei = null;
+
+    // ── Step 1: Try MetaMask on-chain payment ──────────────────────────────
+    if (window.ethereum) {
+      try {
+        const web3 = new Web3(window.ethereum);
+        const contract = new web3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+        const slotId = selectedSlot._id;
+
+        // keccak256(abi.encodePacked(slotId)) — matches Solidity's session mapping key
+        const sessionKey = web3.utils.soliditySha3({ type: 'string', value: slotId });
+        const session = await contract.methods.sessions(sessionKey).call();
+
+        if (session.isActive && session.priceWei.toString() !== '0') {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const account = accounts[0];
+          priceWei = session.priceWei.toString();
+
+          const rawTime = selectedSlot.startTimeRaw || selectedSlot.startTime;
+          const scheduledTime = Math.floor(new Date(rawTime).getTime() / 1000);
+
+          setPaymentStatus('paying');
+          const receipt = await contract.methods
+            .bookSession(slotId, scheduledTime)
+            .send({ from: account, value: priceWei });
+
+          txHash = receipt.transactionHash;
+          const bookedEvent = receipt.events?.SessionBooked;
+          onChainBookingId = bookedEvent?.returnValues?.bookingId ?? null;
+          setPaymentStatus('paid');
+        }
+      } catch (payErr) {
+        // User explicitly rejected MetaMask prompt — stop here
+        if (payErr.code === 4001 || payErr.message?.includes('User denied')) {
+          setError('💰 MetaMask payment cancelled. Please approve the transaction to book this session.');
+          setSubmitting(false);
+          setPaymentStatus(null);
+          return;
+        }
+        // Slot not on-chain or other error — fall back to off-chain request
+        console.warn('[BookSession] on-chain payment skipped:', payErr.message);
+        setPaymentStatus('skipped');
+      }
+    }
+
+    // ── Step 2: Submit mentorship request to backend ───────────────────────
     try {
       await api.post(`/mentorship-requests/${uid()}/send-request`, {
         slotId: selectedSlot._id,
         topic: topic.trim(),
-        message: message.trim()
+        message: message.trim(),
+        ...(txHash              && { txHash }),
+        ...(onChainBookingId != null && { onChainBookingId }),
+        ...(priceWei            && { priceWei: priceWei.toString() })
       }, { headers: { Authorization: `Bearer ${token()}` } });
 
-      setSuccess("\u2705 Mentorship request sent! You'll be notified once the mentor responds.");
+      setSuccess("✅ Mentorship request sent! 💰 1 coin transferred to mentor. You'll be notified once they respond.");
+      if (coinBalance !== null) setCoinBalance(prev => (prev !== null ? prev - 1 : null));
       setSelected(null);
-      setTopic(""); 
-      setMessage(""); 
-      setSelectedSlot(null);
-      setAvailableSlots([]);
+      setTopic(""); setMessage(""); setSelectedSlot(null); setAvailableSlots([]);
+      setPaymentStatus(null);
       setTimeout(() => { setTab("my-mentorships"); fetchMySessions(); }, 1500);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to send mentorship request");
-    } finally { 
-      setSubmitting(false); 
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -489,6 +557,24 @@ export default function BookSession() {
                 {"\uD83D\uDCEC"} Your request will be sent to the mentor. You'll receive an <strong>email &amp; in-app notification</strong> once they accept.
               </div>
 
+              {/* Coin cost banner */}
+              <div style={{
+                background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.3)",
+                borderRadius: "0.7rem", padding: "0.75rem 1rem", marginBottom: "1.25rem",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                fontSize: "0.85rem"
+              }}>
+                <span style={{ color: "#c4b5fd" }}>
+                  {"\uD83E\uDE99"} Booking fee: <strong style={{ color: "#a78bfa" }}>1 coin</strong> will be sent to the mentor
+                </span>
+                <span style={{
+                  background: "rgba(124,58,237,0.25)", borderRadius: "0.5rem",
+                  padding: "0.2rem 0.65rem", color: "#e9d5ff", fontWeight: 700, fontSize: "0.8rem"
+                }}>
+                  {coinBalance !== null ? `Balance: ${coinBalance} coins` : "..."}
+                </span>
+              </div>
+
               {error && <div style={S.alert("error")}>{error}</div>}
 
               <label style={S.label}>Topic *</label>
@@ -575,10 +661,19 @@ export default function BookSession() {
               )}
 
               <div style={{ display: "flex", gap: "0.75rem" }}>
-                <button style={{ ...S.btn("primary"), flex: 1, opacity: submitting ? 0.7 : 1 }} onClick={applyMentorship} disabled={submitting}>
-                  {submitting ? "\u23F3 Sending Request..." : "\uD83D\uDCE9 Send Mentorship Request"}
+                <button
+                  style={{ ...S.btn("primary"), flex: 1, opacity: (submitting || (coinBalance !== null && coinBalance < 1)) ? 0.6 : 1 }}
+                  onClick={applyMentorship}
+                  disabled={submitting || (coinBalance !== null && coinBalance < 1)}
+                >
+                  {paymentStatus === 'paying' ? "⏳ Waiting for MetaMask..." :
+                   paymentStatus === 'paid'   ? "✅ Payment confirmed — sending request..." :
+                   submitting                 ? "⏳ Sending Request..." :
+                   (coinBalance !== null && coinBalance < 1) ? "❌ Insufficient Coins" :
+                   window.ethereum            ? "💰 Pay & Send Request (−1 coin)" :
+                                               "📩 Send Request (−1 coin)"}
                 </button>
-                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); setSelectedSlot(null); setSlotsFetchError(null); }}>Cancel</button>
+                <button style={S.btn("")} onClick={() => { setSelected(null); setError(null); setSelectedSlot(null); setSlotsFetchError(null); setPaymentStatus(null); }}>Cancel</button>
               </div>
             </motion.div>
           </motion.div>
