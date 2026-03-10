@@ -129,12 +129,14 @@ export default function ConnectWallet({ compact }) {
     setPtkn(null);
   };
 
-  if (address) {
+    if (address) {
     const short = `${address.slice(0,6)}...${address.slice(-4)}`;
     return (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Addr title={address}>{short}</Addr>
-        {ptkn != null && <div style={{ color: '#c7baff', fontSize: '0.9rem' }}>{ptkn} PTKN</div>}
+        {ptkn != null && user && !['learner', 'mentor'].includes(user.role) && (
+          <div style={{ color: '#c7baff', fontSize: '0.9rem' }}>{ptkn} PTKN</div>
+        )}
         <Btn onClick={disconnect}>Disconnect</Btn>
       </div>
     );

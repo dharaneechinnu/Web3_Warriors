@@ -237,7 +237,11 @@ const TransactionItem = styled(motion.div)`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-left: 4px solid ${props => props.txType === 'earn' ? '#22c55e' : '#ef4444'};
+  border-left: 4px solid ${props =>
+    props.txType === 'earn' ? '#22c55e' :
+    props.txType === 'challenge_win' ? '#f59e0b' :
+    '#ef4444'
+  };
   transition: all 0.3s ease;
 
   &:hover {
@@ -265,7 +269,11 @@ const TransactionDate = styled.p`
 const TransactionAmount = styled.div`
   font-weight: 700;
   font-size: 1.1rem;
-  color: ${props => props.txType === 'earn' ? '#22c55e' : '#ef4444'};
+  color: ${props =>
+    props.txType === 'earn' ? '#22c55e' :
+    props.txType === 'challenge_win' ? '#f59e0b' :
+    '#ef4444'
+  };
   white-space: nowrap;
   margin-left: 1rem;
 `;
@@ -752,7 +760,8 @@ const Wallet = () => {
                 {[
                   { key: "all", label: "All" },
                   { key: "earn", label: "Earned" },
-                  { key: "spend", label: "Spent" }
+                  { key: "spend", label: "Spent" },
+                  { key: "challenge_win", label: "🏆 Contest Wins" }
                 ].map(tab => (
                   <Tab
                     key={tab.key}
@@ -786,7 +795,7 @@ const Wallet = () => {
                         )}
                       </TransactionInfo>
                       <TransactionAmount txType={tx.transactionType}>
-                        {tx.transactionType === "earn" ? "+" : "-"}{tx.amount}
+                        {tx.transactionType === 'spend' ? '-' : '+'}{tx.amount}
                       </TransactionAmount>
                     </TransactionItem>
                   ))}

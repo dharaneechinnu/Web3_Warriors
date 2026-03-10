@@ -174,6 +174,7 @@ export default function MyCertificates() {
   // On-chain NFT collection (scanned from CertificateNFT contract)
   const [nfts, setNfts] = useState([]);        // [{ tokenId, uri }]
   const [nftLoading, setNftLoading] = useState(false);
+  const [nftMeta, setNftMeta] = useState({});  // { tokenId: { name, description, image } }
 
   const uid = () => localStorage.getItem("userId");
   const walletKey = uid() ? `walletAddress:${uid()}` : 'walletAddress';
@@ -209,8 +210,45 @@ export default function MyCertificates() {
     try {
       const tokens = await getCertificatesForUser(walletAddress);
       setNfts(tokens);
+
+      // Parse each token's metadata URI (IPFS or JSON data URI)
+      const metaMap = {};
+      await Promise.all(
+        tokens.map(async ({ tokenId, uri }) => {
+          if (!uri) return;
+          try {
+            let json;
+            if (uri.startsWith('data:application/json')) {
+              // base64-encoded or plain JSON data URI
+              const raw = uri.split(',')[1];
+              json = JSON.parse(atob(raw));
+            } else if (uri.startsWith('{')) {
+              json = JSON.parse(uri);
+            } else {
+              // IPFS or HTTPS URI — resolve via fetch
+              const fetchUri = uri.startsWith('ipfs://')
+                ? uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                : uri;
+              const r = await fetch(fetchUri, { signal: AbortSignal.timeout(5000) });
+              json = await r.json();
+            }
+            metaMap[tokenId] = {
+              name: json.name || `Certificate NFT #${tokenId}`,
+              description: json.description || '',
+              image: json.image
+                ? json.image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                : null,
+              courseName: json.courseName || json.course || json.name || null,
+              learnerName: json.learnerName || json.recipient || null,
+            };
+          } catch {
+            metaMap[tokenId] = { name: `Certificate NFT #${tokenId}`, image: null };
+          }
+        })
+      );
+      setNftMeta(metaMap);
     } catch (err) {
-      console.error("[MyCertificates] NFT fetch error:", err);
+      console.error('[MyCertificates] NFT fetch error:', err);
     } finally {
       setNftLoading(false);
     }
@@ -453,19 +491,34 @@ export default function MyCertificates() {
 
         {nfts.length > 0 && (
           <div style={S.grid}>
-            {nfts.map(nft => (
+            {nfts.map(nft => {
+              const meta = nftMeta[nft.tokenId] || {};
+              return (
               <motion.div
                 key={nft.tokenId}
                 style={{ ...S.card, borderColor: "rgba(124,58,237,0.4)" }}
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               >
+                {meta.image && (
+                  <img
+                    src={meta.image}
+                    alt={meta.name || `NFT #${nft.tokenId}`}
+                    style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: "1.25rem 1.25rem 0 0" }}
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+                )}
                 <div style={{ ...S.banner, background: "linear-gradient(135deg,#1e1b4b,#7c3aed,#06b6d4)" }}>
                   <div style={S.bannerBadge}>NFT #{nft.tokenId}</div>
                   <div style={S.bannerIcon}>🏅</div>
-                  <div style={S.bannerCourse}>Certificate NFT #{nft.tokenId}</div>
-                  <div style={S.bannerMentor}>⛓️ On-chain credential</div>
+                  <div style={S.bannerCourse}>{meta.courseName || meta.name || `Certificate NFT #${nft.tokenId}`}</div>
+                  <div style={S.bannerMentor}>
+                    {meta.learnerName ? `👤 ${meta.learnerName} · ` : ''}⛓️ On-chain credential
+                  </div>
                 </div>
                 <div style={S.body}>
+                  {meta.description && (
+                    <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.5rem" }}>{meta.description}</div>
+                  )}
                   {nft.uri && (
                     <div style={S.infoRow}>
                       <span style={S.label}>Metadata URI</span>
@@ -506,7 +559,8 @@ export default function MyCertificates() {
                   )}
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

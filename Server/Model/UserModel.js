@@ -71,7 +71,7 @@ const userSchema = new mongoose.Schema({
     default: 10,
   },
   transactionHistory: [{
-    transactionType: { type: String, enum: ['earn', 'spend'], required: true },
+    transactionType: { type: String, enum: ['earn', 'spend', 'challenge_win'], required: true },
     amount: { type: Number, required: true },
     timestamp: { type: Date, default: Date.now },
     description: { type: String },

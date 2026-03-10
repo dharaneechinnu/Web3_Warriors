@@ -150,13 +150,7 @@ function LoginLearner() {
             🦊 Wallet connected: <strong style={{ color: '#c4b5fd' }}>
               {walletInfo.address.slice(0, 6)}…{walletInfo.address.slice(-4)}
             </strong>
-            <br />
-            💎 PTKN Balance: <strong style={{ color: '#fff' }}>{walletInfo.ptkn} PTKN</strong>
-            {Number(walletInfo.ptkn) === 0 && (
-              <div style={{ color: '#f59e0b', marginTop: '0.3rem', fontSize: '0.78rem' }}>
-                ⏳ 10 PTKN registration bonus will be sent to your wallet by admin.
-              </div>
-            )}
+            {/* PTKN balance hidden for learners/mentors by request */}
           </motion.div>
         )}
 

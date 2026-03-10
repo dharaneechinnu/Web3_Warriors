@@ -27,8 +27,11 @@ module.exports = (io) => {
             // Remove stale entry for the same user (reconnect)
             rooms[roomId] = rooms[roomId].filter(p => p.userId !== userId);
 
-            rooms[roomId].push({ socketId: socket.id, userId, userName, role });
+            // track per-user metadata (including presenting state)
+            rooms[roomId].push({ socketId: socket.id, userId, userName, role, isPresenting: false });
 
+            console.log(`[join-room] socket=${socket.id} userId=${userId} userName=${userName} role=${role} room=${roomId}`);
+            console.log(`[room ${roomId}] participants:`, rooms[roomId].map(p => ({ socketId: p.socketId, userId: p.userId, userName: p.userName, role: p.role, isPresenting: p.isPresenting })));
             const others = rooms[roomId].filter(p => p.socketId !== socket.id);
 
             // Tell the new joiner who is already in the room
@@ -84,11 +87,27 @@ module.exports = (io) => {
 
         // ── SCREEN SHARING SIGNALS ─────────────────────────────────────────────
         socket.on('screen-share-started', ({ roomId }) => {
+            // mark this participant as presenting so future joiners can learn state
+            if (rooms[roomId]) {
+                const p = rooms[roomId].find(x => x.socketId === socket.id);
+                if (p) p.isPresenting = true;
+            }
             socket.to(roomId).emit('peer-screen-share-started', { from: socket.id });
         });
 
         socket.on('screen-share-stopped', ({ roomId }) => {
+            if (rooms[roomId]) {
+                const p = rooms[roomId].find(x => x.socketId === socket.id);
+                if (p) p.isPresenting = false;
+            }
             socket.to(roomId).emit('peer-screen-share-stopped', { from: socket.id });
+        });
+
+        // Request a presenter to create a fresh offer targeted at a joining peer.
+        // Payload: { to: <presenterSocketId>, target: <newJoinerSocketId> }
+        socket.on('request-presenter-offer', ({ to, target }) => {
+            if (!to || !target) return;
+            io.to(to).emit('request-presenter-offer', { target });
         });
 
         socket.on('end-call', ({ roomId }) => {

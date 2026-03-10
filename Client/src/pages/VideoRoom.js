@@ -96,9 +96,11 @@ export default function VideoRoom() {
   const remoteStreamRef = useRef(null);    // single MediaStream for all remote tracks
   const chatEndRef        = useRef(null);
   const offerSent         = useRef(false);
+  const wasFirstInRoom    = useRef(false); // true if we joined to an empty room
   const remoteSockId      = useRef(null);
   const iceCandidateQueue = useRef([]);   // queue ICE candidates until remoteDesc is set
   const remoteDescSet     = useRef(false);
+  const socketConnected   = useRef(false); // tracks whether we had a prior connection (for reconnect detection)
 
   /* state */
   const [joined, setJoined]               = useState(false);       // lobby → in-call
@@ -113,6 +115,11 @@ export default function VideoRoom() {
   const [screenSharing, setScreenSharing] = useState(false);       // am I sharing?
   const [peerSharing, setPeerSharing]     = useState(false);       // is peer sharing?
   const [cameraReady, setCameraReady]     = useState(false);       // camera acquired?
+  const screenSharingRef = useRef(false);
+
+  useEffect(() => {
+    screenSharingRef.current = screenSharing;
+  }, [screenSharing]);
 
   /* ── helpers ──────────────────────────────────────────────────────────── */
   const addMsg = (msg) => setMessages(prev => [...prev, msg]);
@@ -136,12 +143,12 @@ export default function VideoRoom() {
   }, []);
 
   const createPC = useCallback((remoteSocketId) => {
-    // If existing PC is still open and usable, return it
+    // If existing PC is still open and usable and it's for the same remote peer, return it
     if (pcRef.current && pcRef.current.signalingState !== "closed") {
-      return pcRef.current;
-    }
-    // Close stale connection if it exists
-    if (pcRef.current) {
+      if (remoteSocketId && remoteSockId.current === remoteSocketId) {
+        return pcRef.current;
+      }
+      // otherwise close the existing connection so we can create a new one targeting the requested socket
       try { pcRef.current.close(); } catch (_) {}
       pcRef.current = null;
     }
@@ -156,9 +163,16 @@ export default function VideoRoom() {
     // Prepare a single MediaStream to collect all remote tracks
     remoteStreamRef.current = new MediaStream();
 
-    // Add local tracks
+    // Add local tracks. If camera is unavailable, add recvonly transceivers so the
+    // SDP always contains media sections — without them the offer has no m= lines
+    // and setRemoteDescription on the other side silently fails / ICE never forms.
     if (localStream.current) {
       localStream.current.getTracks().forEach(t => pc.addTrack(t, localStream.current));
+    } else {
+      try {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+      } catch (_) {}
     }
 
     // Remote stream — simply add every incoming track to one MediaStream
@@ -200,7 +214,12 @@ export default function VideoRoom() {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+      const s = pc.connectionState;
+      console.log(`[WebRTC] connectionState=${s}`);
+      if (s === "connected") {
+        setConnected(true);
+        setStatus("Connected");
+      } else if (s === "disconnected" || s === "failed") {
         setConnected(false);
         setStatus("Peer disconnected");
       }
@@ -213,6 +232,12 @@ export default function VideoRoom() {
   useEffect(() => {
     let cancelled = false;
     const getCamera = async () => {
+      // Reuse existing live stream (avoids camera-busy error on hot-reload remount)
+      if (localStream.current && localStream.current.getTracks().some(t => t.readyState === 'live')) {
+        if (localRef.current) localRef.current.srcObject = localStream.current;
+        setCameraReady(true);
+        return;
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
@@ -221,6 +246,7 @@ export default function VideoRoom() {
         setCameraReady(true);
       } catch (err) {
         console.warn("Camera/mic not available:", err.message);
+        setVideoOn(false); // no camera — show avatar instead
         setCameraReady(true); // still allow joining without camera
       }
     };
@@ -242,25 +268,64 @@ export default function VideoRoom() {
 
     /* Connect Socket.IO */
     socket = io(SOCKET_URL, {
-      transports: ["polling", "websocket"],   // polling first so proxies can upgrade
+      transports: ["websocket", "polling"],   // websocket first — avoids transport-close disconnect on upgrade
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      const isReconnect = socketConnected.current;
+      socketConnected.current = true;
+      console.log(`[VideoRoom] socket ${isReconnect ? 're' : ''}connected id=${socket.id} userId=${userId} userName=${userName} role=${role}`);
+
+      // On reconnect: tear down stale PC and reset all offer/ICE flags so a clean
+      // handshake can happen — new socket ID means old peer connection is invalid.
+      if (isReconnect) {
+        try { pcRef.current?.close(); } catch (_) {}
+        pcRef.current = null;
+        offerSent.current = false;
+        wasFirstInRoom.current = false;
+        remoteDescSet.current = false;
+        iceCandidateQueue.current = [];
+        remoteSockId.current = null;
+        setConnected(false);
+      }
+
       setStatus("Connected to server. Waiting for peer\u2026");
       socket.emit("join-room", { roomId, userId, userName, role });
     });
 
-    /* 3. Someone already in room → I am the offerer */
+    socket.on('connect_error', (err) => {
+      console.warn('[VideoRoom] socket connect_error', err && err.message ? err.message : err);
+      setStatus('Server connection error');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('[VideoRoom] socket disconnected', reason);
+      setStatus('Disconnected');
+    });
+
+    /* 3. Room state on join */
     socket.on("room-users", async (others) => {
-      if (!others.length) return;
+      console.log('[VideoRoom] room-users received:', others);
+      if (!others.length) {
+        // We are first in the room -- flag ourselves so user-connected knows to send the offer
+        wasFirstInRoom.current = true;
+        return;
+      }
+      // We joined to a non-empty room -- we are the offerer
+      wasFirstInRoom.current = false;
       const other = others[0];
+      // Reflect presenting state if the existing peer is already sharing
+      if (other && other.isPresenting) {
+        setPeerSharing(true);
+        socketRef.current?.emit('request-presenter-offer', { to: other.socketId, target: socketRef.current?.id });
+      }
       remoteSockId.current = other.socketId;
       setPeerName(other.userName);
-      setStatus(`${other.userName} is already here. Connecting\u2026`);
+      setStatus(`${other.userName} is already here. Connecting…`);
       offerSent.current = true;
 
       try {
@@ -283,44 +348,62 @@ export default function VideoRoom() {
        Sending an offer immediately from user-connected causes a deadlock: both peers
        set offerSent=true, then both skip answering each other → nobody connects. */
     socket.on("user-connected", async ({ socketId, userName: n }) => {
+      console.log(`[VideoRoom] user-connected socketId=${socketId} name=${n} wasFirst=${wasFirstInRoom.current} offerSent=${offerSent.current}`);
       remoteSockId.current = socketId;
       setPeerName(n);
       setStatus(`${n} joined. Connecting\u2026`);
 
-      // If we already sent an offer via room-users, just set up the PC for the answer
+      // If we already sent an offer via room-users (we were second in room), just set up the PC
       if (offerSent.current) { createPC(socketId); return; }
 
-      // Create PC and wait — the peer who saw us in room-users will send their offer shortly.
-      createPC(socketId);
+      // We were first in the room — peer just joined second.
+      // The second joiner already sends an offer via their room-users handler.
+      // We just create the PC and wait for their incoming offer.
+      if (wasFirstInRoom.current) {
+        wasFirstInRoom.current = false;
+        createPC(socketId);
+        return;
+      }
 
-      // Fallback for true simultaneous join: if no offer arrives within 2s and we have
-      // the higher socket ID, we initiate. This avoids a permanent deadlock on exact
-      // same-tick joins without racing against the room-users path.
+      // Truly simultaneous join (both got empty room-users): use socket ID tiebreaker.
+      // The peer with higher socket ID sends the offer.
+      createPC(socketId);
       if (socket.id > socketId) {
         setTimeout(async () => {
-          // If a remote description was already set (offer received/answered), do nothing.
           if (offerSent.current || remoteDescSet.current) return;
           const pc = pcRef.current;
-          if (!pc || pc.signalingState === "closed") return;
+          if (!pc || pc.signalingState === 'closed') return;
           offerSent.current = true;
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            socket.emit("offer", { roomId, offer, to: socketId });
+            socket.emit('offer', { roomId, offer, to: socketId });
           } catch (err) {
-            console.warn("[user-connected] fallback offer failed:", err.message);
+            console.warn('[user-connected] tiebreaker offer failed:', err.message);
           }
-        }, 2000);
+        }, 1500);
       }
     });
 
     /* 5. Receive offer → answer */
     socket.on("offer", async ({ offer, from }) => {
-      if (offerSent.current) return;
       remoteSockId.current = from;
       try {
         const pc = createPC(from);
-        if (pc.signalingState === "closed") return;
+        if (!pc || pc.signalingState === "closed") return;
+
+        // Handle offer glare: if we already sent an offer (simultaneous join),
+        // roll back our local offer before accepting the incoming one.
+        if (pc.signalingState === "have-local-offer") {
+          console.log('[VideoRoom] offer glare detected – rolling back local offer');
+          await pc.setLocalDescription({ type: 'rollback' });
+          offerSent.current = false;
+          // Discard queued ICE candidates from the rolled-back session — they
+          // belong to a different SDP generation and will fail if applied.
+          remoteDescSet.current = false;
+          iceCandidateQueue.current = [];
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         // Mark remote desc as set and flush any queued ICE candidates
         remoteDescSet.current = true;
@@ -337,9 +420,15 @@ export default function VideoRoom() {
     });
 
     /* 6. Receive answer */
-    socket.on("answer", async ({ answer }) => {
+    socket.on("answer", async ({ answer, from }) => {
       const pc = pcRef.current;
-      if (pc && pc.signalingState !== "stable") {
+      // Only valid to apply a remote answer when we have a pending local offer.
+      // Any other state (stable, have-remote-offer, closed) must be skipped to
+      // avoid "Called in wrong state: stable" InvalidStateError.
+      if (!pc || pc.signalingState !== "have-local-offer") return;
+      // Ignore stale answers from a previous peer connection (e.g. after reconnect)
+      if (from && remoteSockId.current && from !== remoteSockId.current) return;
+      try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
         // Mark remote desc as set and flush any queued ICE candidates
         remoteDescSet.current = true;
@@ -347,14 +436,25 @@ export default function VideoRoom() {
           try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
         }
         iceCandidateQueue.current = [];
+      } catch (err) {
+        console.warn("[answer] setRemoteDescription failed:", err.message);
       }
     });
 
     /* 7. ICE candidates — queue them if remote description not yet set */
-    socket.on("ice-candidate", async ({ candidate }) => {
+    socket.on("ice-candidate", async ({ candidate, from }) => {
       if (!candidate) return;
       const pc = pcRef.current;
       if (!pc || pc.signalingState === "closed") return;
+      // Drop stale candidates from a previous/different peer session
+      if (from && remoteSockId.current && from !== remoteSockId.current) return;
+      // End-of-candidates signal (candidate.candidate === '')
+      if (candidate.candidate === '') {
+        if (remoteDescSet.current) {
+          try { await pc.addIceCandidate(null); } catch (_) {}
+        }
+        return;
+      }
       if (!remoteDescSet.current) {
         // Remote desc not ready yet — buffer the candidate
         iceCandidateQueue.current.push(candidate);
@@ -378,6 +478,7 @@ export default function VideoRoom() {
       pcRef.current?.close();
       pcRef.current = null;
       offerSent.current = false;
+      wasFirstInRoom.current = false;
     });
 
     /* 9. Peer ended call */
@@ -393,6 +494,7 @@ export default function VideoRoom() {
         pcRef.current = null;
       }
       offerSent.current = false;
+      wasFirstInRoom.current = false;
     });
 
     /* 10. Peer media toggles */
@@ -411,6 +513,20 @@ export default function VideoRoom() {
       setPeerSharing(false);
     });
 
+    // If server asks us (the presenter) to re-offer to a late joiner, create an offer
+    socket.on('request-presenter-offer', async ({ target }) => {
+      try {
+        if (!screenSharingRef.current) return; // only presenters should respond
+        const pc = createPC(target);
+        if (!pc || pc.signalingState === 'closed') return;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', { roomId, offer, to: target });
+      } catch (err) {
+        console.warn('[request-presenter-offer] failed:', err?.message || err);
+      }
+    });
+
     /* 12. Chat — ignore own messages (server broadcasts to full room) */
     socket.on("room-message", ({ message, userName: n, timestamp, from }) => {
       if (from === socket.id) return;  // already added locally
@@ -421,6 +537,7 @@ export default function VideoRoom() {
       localStream.current?.getTracks().forEach(t => t.stop());
       screenStream.current?.getTracks().forEach(t => t.stop());
       pcRef.current?.close();
+      socketConnected.current = false;
       socket?.disconnect();
     };
   }, [joined, roomId, userId, userName, role, createPC]);

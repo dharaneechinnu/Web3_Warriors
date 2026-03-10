@@ -383,12 +383,14 @@ exports.distributeRewards = async (req, res) => {
                 if (learner) {
                     learner.tokenBalance = (learner.tokenBalance || 0) + tokens;
                     learner.transactionHistory.push({
-                        transactionType: 'earn',
+                        transactionType: 'challenge_win',
                         amount: tokens,
-                        description: `Challenge reward: ${challenge.title} (Rank #${sub.rank})`,
+                        description: `🏆 Contest Win: ${challenge.title} (Rank #${sub.rank})`,
                         timestamp: new Date()
                     });
                     await learner.save();
+                    // store wallet for on-chain response
+                    sub._walletAddress = learner.UserWalletAddress || null;
                 }
             }
         }
@@ -412,7 +414,15 @@ exports.distributeRewards = async (req, res) => {
             }
         }
 
-        res.json({ success: true, message: 'Rewards distributed successfully', distributed: rankedSubs.length });
+        // Build winners payload for frontend on-chain transfers
+        const winners = rankedSubs.map(s => ({
+            learnerId: s.learnerId,
+            rank: s.rank,
+            tokens: s.rewardTokens || 0,
+            walletAddress: s._walletAddress || null
+        }));
+
+        res.json({ success: true, message: 'Rewards distributed successfully', distributed: rankedSubs.length, winners });
     } catch (error) {
         console.error('distributeRewards error:', error);
         res.status(500).json({ success: false, message: error.message });

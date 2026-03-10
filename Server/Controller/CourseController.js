@@ -349,6 +349,38 @@ exports.enrollInCourse = async (req, res) => {
     }
 };
 
+/**
+ * Record the on-chain txHash for an enrollment (called after frontend web3 transfer).
+ * Updates the most recent 'spend' enrollment transaction for this course.
+ */
+exports.recordEnrollTxHash = async (req, res) => {
+    try {
+        const { learnerId, courseId, txHash } = req.body;
+        if (!learnerId || !courseId || !txHash) {
+            return res.status(400).json({ message: 'learnerId, courseId, txHash are required' });
+        }
+        const learner = await User.findById(learnerId);
+        if (!learner) return res.status(404).json({ message: 'Learner not found' });
+
+        const course = await Course.findById(courseId).select('title');
+        const courseTitle = course?.title || '';
+
+        // Attach txHash to the most recent spend transaction matching this course
+        for (let i = learner.transactionHistory.length - 1; i >= 0; i--) {
+            const tx = learner.transactionHistory[i];
+            if (tx.transactionType === 'spend' && tx.description?.includes(courseTitle)) {
+                tx.txHash = txHash;
+                break;
+            }
+        }
+        await learner.save();
+        res.json({ success: true });
+    } catch (err) {
+        console.error('recordEnrollTxHash error:', err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
 exports.getMentorCourses = async (req, res) => {
     try {
         const mentorId = req.params.mentorId;

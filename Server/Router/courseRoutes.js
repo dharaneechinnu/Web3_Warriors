@@ -35,6 +35,8 @@ router.get("/:id", courseController.getCourseById);
 
 //router to enroll user 
 router.post("/enroll", courseController.enrollInCourse);
+// Record on-chain txHash for an enrollment (called after successful web3 transfer)
+router.post("/enroll/txhash", courseController.recordEnrollTxHash);
 
 router.get("/enrolled/:userId", courseController.getEnrolledCourses);
 

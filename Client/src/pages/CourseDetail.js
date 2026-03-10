@@ -4,7 +4,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import TransactionStatus from '../components/TransactionStatus';
-import { approve } from '../web3/services/skillTokenService';
+import { approve, transfer } from '../web3/services/skillTokenService';
 import { purchaseCourse } from '../web3/services/skillPlatformService';
 import { SKILL_PLATFORM_ADDRESS, BLOCK_EXPLORER } from '../web3/config';
 
@@ -84,40 +84,70 @@ const CourseDetail = () => {
 
     setEnrolling(true);
     setTxVisible(true);
-    setTxStatus('wallet');
-    setTxMessage('Approve 1 SKT token for course enrollment…');
+    setTxStatus('pending');
+    setTxMessage('Enrolling in course…');
     setTxHash('');
 
+    let web2Done = false;
+    let web3TxHash = '';
+
     try {
-      // Step 1: Learner approves 1 SKT for the SkillPlatform contract
-      const approveTx = await approve(SKILL_PLATFORM_ADDRESS, '1');
-      setTxStatus('pending');
-      setTxMessage('Token approved! Processing course purchase on blockchain…');
-
-      // Step 2: Attempt on-chain purchaseCourse (works if connected wallet is admin)
-      try {
-        const mentorAddr = course.mentorWallet || course.mentor?.walletAddress;
-        const learnerAddr = user.walletAddress || (user && user._id ? localStorage.getItem(`walletAddress:${user._id}`) : localStorage.getItem('walletAddress'));
-        if (mentorAddr && learnerAddr) {
-          const purchaseTx = await purchaseCourse(learnerAddr, mentorAddr);
-          setTxHash(purchaseTx.transactionHash || '');
-        }
-      } catch {
-        // Non-admin wallet – approval done, backend handles the rest
-      }
-
-      // Step 3: API enrollment (always runs)
+      // ── Step 1: Web2 Enrollment (always runs first — preserved regardless of web3) ──
       await api.post('/courses/enroll', {
         learnerId: user._id,
         courseId: course._id
       });
+      web2Done = true;
+      setIsEnrolled(true);
+      setTxMessage('Enrolled! Attempting on-chain PTKN transfer to instructor…');
+
+      // ── Step 2: Web3 PTKN Transfer learner → mentor (best-effort, no rollback on failure) ──
+      try {
+        const mentorAddr =
+          course.mentorWallet ||
+          course.mentor?.walletAddress ||
+          course.instructorWallet ||
+          null;
+        const learnerAddr =
+          user.walletAddress ||
+          (user._id ? localStorage.getItem(`walletAddress:${user._id}`) : null) ||
+          localStorage.getItem('walletAddress') ||
+          null;
+
+        if (mentorAddr && learnerAddr) {
+          setTxStatus('wallet');
+          setTxMessage('MetaMask: Approve transfer of 1 PTKN to instructor…');
+          const tx = await transfer(mentorAddr, '1');
+          web3TxHash = tx.transactionHash || '';
+          setTxHash(web3TxHash);
+
+          // Record on-chain txHash in backend (fire-and-forget — non-blocking)
+          api.post('/courses/enroll/txhash', {
+            learnerId: user._id,
+            courseId: course._id,
+            txHash: web3TxHash
+          }).catch(() => {});
+        }
+      } catch (web3Err) {
+        // Web3 failed — enrollment already saved, no rollback needed
+        console.warn('[CourseDetail] On-chain PTKN transfer skipped:', web3Err.message);
+      }
 
       setTxStatus('success');
-      setTxMessage('Enrolled successfully! 1 SKT transferred to the instructor.');
-      setIsEnrolled(true);
+      setTxMessage(
+        web3TxHash
+          ? 'Enrolled! 1 PTKN transferred to instructor on-chain. ✅'
+          : 'Enrolled successfully! (Connect wallet to also send on-chain PTKN to instructor)'
+      );
     } catch (err) {
-      setTxStatus('error');
-      setTxMessage(err.message || err.response?.data?.message || 'Enrollment failed.');
+      if (web2Done) {
+        // Enrollment was saved but something failed after — keep enrolled
+        setTxStatus('success');
+        setTxMessage('Enrolled successfully!');
+      } else {
+        setTxStatus('error');
+        setTxMessage(err.message || err.response?.data?.message || 'Enrollment failed.');
+      }
     } finally {
       setEnrolling(false);
     }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import api from "../../services/api";
 import { assetUrl } from "../../config";
+import { sendReward } from "../../web3/services/skillTokenService";
 
 const MentorChallenges = () => {
   const [challenges, setChallenges] = useState([]);
@@ -21,6 +22,7 @@ const MentorChallenges = () => {
     prizeThird: 20,
   });
   const [saving, setSaving] = useState(false);
+  const [distributing, setDistributing] = useState(false);
   const [mentorId] = useState(localStorage.getItem("userId"));
 
   const fetchChallenges = useCallback(async () => {
@@ -119,15 +121,44 @@ const MentorChallenges = () => {
 
   const handleDistribute = async () => {
     if (!window.confirm("Distribute rewards to top 3? This cannot be undone.")) return;
+    setDistributing(true);
+    setError(null);
     try {
       const token = localStorage.getItem("token");
-      await api.post(`/challenges/${selected._id}/distribute-rewards`, { mentorId }, {
+      const res = await api.post(`/challenges/${selected._id}/distribute-rewards`, { mentorId }, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setSuccess("Rewards distributed!");
+
+      const winners = res.data.winners || [];
+
+      // ── Try on-chain PTKN reward transfer for each winner (best-effort) ─────────────────
+      let chainSuccessCount = 0;
+      const pendingChain = winners.filter(w => w.walletAddress && w.tokens > 0);
+      for (const winner of pendingChain) {
+        try {
+          const tx = await sendReward(winner.walletAddress, String(winner.tokens));
+          // Store on-chain tx hash (fire-and-forget)
+          api.patch(
+            `/challenges/${selected._id}/winner-txhash`,
+            { learnerId: winner.learnerId, txHash: tx.transactionHash, mentorId },
+            { headers: { Authorization: `Bearer ${token}` } }
+          ).catch(() => {});
+          chainSuccessCount++;
+        } catch (web3Err) {
+          console.warn(`[MentorChallenges] On-chain reward failed for ${winner.walletAddress}:`, web3Err.message);
+        }
+      }
+
+      setSuccess(
+        chainSuccessCount > 0
+          ? `🏆 Rewards distributed! ${chainSuccessCount}/${pendingChain.length} on-chain PTKN transfers completed.`
+          : '🏆 Rewards distributed! (Connect admin wallet to also send on-chain PTKN to winners)'
+      );
       fetchChallenges();
     } catch (err) {
       setError(err.response?.data?.message || "Distribution failed");
+    } finally {
+      setDistributing(false);
     }
   };
 
@@ -304,9 +335,10 @@ const MentorChallenges = () => {
               {selected.status === "closed" && (
                 <button
                   onClick={handleDistribute}
-                  className="ml-auto bg-yellow-600 hover:bg-yellow-500 px-4 py-2 rounded-lg text-sm font-semibold"
+                  disabled={distributing}
+                  className="ml-auto bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
                 >
-                  Distribute Rewards
+                  {distributing ? '⏳ Distributing…' : '💰 Distribute Rewards'}
                 </button>
               )}
             </div>
