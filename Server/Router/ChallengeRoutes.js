@@ -29,6 +29,7 @@ router.patch('/status/:id', ctrl.updateStatus);           // publish / close
 router.get('/:id/submissions', ctrl.getSubmissions);       // mentor views submissions
 router.put('/:id/submissions/:submissionId/rank', ctrl.rankSubmission);
 router.post('/:id/distribute-rewards', ctrl.distributeRewards);
+router.patch('/:id/winner-txhash', ctrl.winnerTxHash);  // record on-chain tx hash for a winner
 
 // ─── LEARNER ──────────────────────────────────────────────────────────────────
 router.get('/', ctrl.getChallenges);                       // all published

@@ -172,3 +172,38 @@ export async function approve(spender, amount) {
   const tx = await contract.methods.approve(spender, weiAmount).send({ from });
   return tx;
 }
+
+/**
+ * Mint SKT tokens directly to a contest winner's wallet.
+ * Requires the connected MetaMask wallet to hold MINTER_ROLE on SkillToken.
+ * (If only SkillPlatform holds MINTER_ROLE, use SkillPlatform.declareWinners instead.)
+ *
+ * @param {string} recipientAddr  Winner's wallet address
+ * @param {string|number} amount  Amount in SKT (human-readable, e.g. "100")
+ * @returns {{ tx, txHash }}
+ */
+export async function mintToWinner(recipientAddr, amount) {
+  if (!recipientAddr) throw new Error('Recipient address is required.');
+  if (!amount || Number(amount) <= 0) throw new Error('Amount must be greater than 0.');
+
+  const { w3, contract } = await getWeb3AndContract();
+
+  const chainId = Number(await w3.eth.getChainId());
+  if (typeof EXPECTED_CHAIN_ID !== 'undefined' && EXPECTED_CHAIN_ID !== null) {
+    if (chainId !== EXPECTED_CHAIN_ID) {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: Web3.utils.toHex(EXPECTED_CHAIN_ID) }],
+      });
+    }
+  }
+
+  const accounts = await w3.eth.getAccounts();
+  const from = accounts[0];
+  if (!from) throw new Error('No MetaMask account connected.');
+
+  const weiAmount = w3.utils.toWei(String(amount), 'ether');
+  const tx = await contract.methods.mintTo(recipientAddr, weiAmount).send({ from });
+  console.log(`[SkillToken] mintTo ${amount} SKT → ${recipientAddr}`, tx.transactionHash);
+  return { tx, txHash: tx.transactionHash };
+}

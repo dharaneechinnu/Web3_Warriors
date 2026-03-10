@@ -41,6 +41,8 @@ const ChallengeSchema = new mongoose.Schema({
         third: { type: Number, default: 20 }
     },
     rewardsDistributed: { type: Boolean, default: false },
+    onChainChallengeId: { type: Number, default: null }, // uint256 used in SkillPlatform.declareWinners
+    winnerAnnouncedAt: { type: Date, default: null },
     thumbnail: { type: String },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }

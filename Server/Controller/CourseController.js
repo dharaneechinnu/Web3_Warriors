@@ -3126,3 +3126,24 @@ exports.getUserCertificates = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Save NFT token ID and txHash after on-chain mint (called from frontend after MetaMask confirms)
+exports.saveCertificateNFT = async (req, res) => {
+    try {
+        const { certificateId } = req.params;
+        const { nftTokenId, txHash } = req.body;
+        if (!certificateId) return res.status(400).json({ success: false, message: 'certificateId required' });
+        if (nftTokenId == null) return res.status(400).json({ success: false, message: 'nftTokenId required' });
+
+        const cert = await CertificationModel.findOneAndUpdate(
+            { certificateId },
+            { nftTokenId: Number(nftTokenId), ...(txHash ? { txHash } : {}) },
+            { new: true }
+        );
+        if (!cert) return res.status(404).json({ success: false, message: 'Certificate not found' });
+
+        res.json({ success: true, certificate: cert });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

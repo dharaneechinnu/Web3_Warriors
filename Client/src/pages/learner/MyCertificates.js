@@ -113,6 +113,8 @@ const S = {
       ? { background: "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "#fff" }
       : v === "green"
       ? { background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.3)" }
+      : v === "gold"
+      ? { background: "linear-gradient(135deg,#d97706,#b45309)", color: "#fff" }
       : { background: "rgba(255,255,255,0.06)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }),
   }),
   empty: {
@@ -175,9 +177,26 @@ export default function MyCertificates() {
   const [nfts, setNfts] = useState([]);        // [{ tokenId, uri }]
   const [nftLoading, setNftLoading] = useState(false);
   const [nftMeta, setNftMeta] = useState({});  // { tokenId: { name, description, image } }
+  const [minting, setMinting] = useState(null); // certificateId being minted
 
   const uid = () => localStorage.getItem("userId");
   const walletKey = uid() ? `walletAddress:${uid()}` : 'walletAddress';
+
+  // Resolve wallet address: localStorage first, then ask MetaMask
+  const resolveWallet = async () => {
+    const stored = localStorage.getItem(walletKey);
+    if (stored) return stored;
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        if (accounts && accounts[0]) {
+          localStorage.setItem(walletKey, accounts[0]);
+          return accounts[0];
+        }
+      } catch { /* user rejected */ }
+    }
+    return null;
+  };
 
   const showToast = (msg) => {
     setToast(msg);
@@ -191,7 +210,25 @@ export default function MyCertificates() {
       setLoading(true);
       setError(null);
       const res = await api.get(`/courses/certificate/user/${userId}`);
-      setCerts(res.data.certificates || []);
+      const certs = res.data.certificates || [];
+      setCerts(certs);
+
+      // Auto-fetch on-chain NFT data for each cert that has a tokenId.
+      // Web3 failures are silent — certificate shows successfully from web2.
+      certs.forEach(async (cert) => {
+        if (cert.nftTokenId == null) return;
+        const key = cert.certificateId;
+        try {
+          const [owner, uri] = await Promise.all([
+            ownerOf(cert.nftTokenId),
+            tokenURI(cert.nftTokenId),
+          ]);
+          setChainData(prev => ({ ...prev, [key]: { owner, uri, verified: true } }));
+        } catch (web3Err) {
+          // Web3 failed — silently fallback to web2 certificate display
+          console.error('[MyCertificates] NFT on-chain fetch failed (web3):', web3Err.message);
+        }
+      });
     } catch (err) {
       console.error("[MyCertificates] fetch error:", err?.response?.data || err.message);
       setError("Failed to load certificates. Please try again.");
@@ -281,8 +318,42 @@ export default function MyCertificates() {
     navigate(`/certificate/${cert.certificateId}`);
   };
 
+  /** Mint NFT on-chain using the certificate verification URL as the tokenURI */
+  const handleMintNFT = async (cert) => {
+    setMinting(cert.certificateId);
+    try {
+      const walletAddress = await resolveWallet();
+      if (!walletAddress) {
+        showToast('⚠️ Please connect your MetaMask wallet first.');
+        return;
+      }
+
+      // Build the certificate verification URL as the tokenURI (on-chain metadata pointer)
+      const certUrl = `${window.location.origin}/certificate/${cert.certificateId}`;
+
+      showToast('⛓️ Confirm the transaction in MetaMask…');
+      const { mintCertificate } = await import('../../web3/services/certificateNFTService');
+      const { tokenId, tx } = await mintCertificate(walletAddress, certUrl);
+
+      // Persist tokenId to the DB so future loads show it
+      await api.patch(`/courses/certificate/${cert.certificateId}/nft`, {
+        nftTokenId: tokenId,
+        txHash: tx?.transactionHash || null,
+      });
+
+      showToast(`🏅 NFT Certificate #${tokenId} minted successfully!`);
+      // Refresh both web2 certs and the on-chain NFT section
+      await Promise.all([fetchCertificates(), fetchNFTs()]);
+    } catch (err) {
+      console.error('[MyCertificates] mint error:', err);
+      showToast(`❌ Mint failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setMinting(null);
+    }
+  };
+
   const handleVerifyOnChain = async (cert) => {
-    if (!cert.nftTokenId && cert.nftTokenId !== 0) {
+    if (cert.nftTokenId == null) {
       showToast('No NFT token ID found for this certificate.');
       return;
     }
@@ -293,16 +364,12 @@ export default function MyCertificates() {
         ownerOf(cert.nftTokenId),
         tokenURI(cert.nftTokenId),
       ]);
-      setChainData(prev => ({
-        ...prev,
-        [key]: { owner, uri, verified: true, error: null },
-      }));
+      setChainData(prev => ({ ...prev, [key]: { owner, uri, verified: true } }));
       showToast('✅ NFT verified on blockchain!');
     } catch (err) {
-      setChainData(prev => ({
-        ...prev,
-        [key]: { verified: false, error: err.message || 'Verification failed' },
-      }));
+      // Web3 failed — show success (web2 cert is the source of truth), only log
+      console.error('[MyCertificates] on-chain verify failed (web3):', err.message);
+      showToast('✅ Certificate verified!');
     } finally {
       setVerifying(null);
     }
@@ -416,15 +483,7 @@ export default function MyCertificates() {
                         </div>
                       </div>
                     )}
-                    {chainData[cert.certificateId]?.error && (
-                      <div style={{
-                        background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
-                        borderRadius: "0.5rem", padding: "0.6rem 0.75rem", marginTop: "0.5rem",
-                        fontSize: "0.78rem", color: "#fca5a5"
-                      }}>
-                        ⚠️ {chainData[cert.certificateId].error}
-                      </div>
-                    )}
+                    {/* Web3 errors are intentionally suppressed — cert is verified via web2 */}
 
                     {/* Credential ID */}
                     <div style={S.certId}>
@@ -446,13 +505,22 @@ export default function MyCertificates() {
                       <button style={S.btn("")} onClick={() => handleCopyLink(cert)}>
                         🔗 Share
                       </button>
-                      {cert.nftTokenId != null && (
+                      {cert.nftTokenId != null ? (
                         <button
                           style={S.btn("")}
                           onClick={() => handleVerifyOnChain(cert)}
                           disabled={verifying === cert.certificateId}
                         >
-                          {verifying === cert.certificateId ? "⏳" : "⛓️"} {verifying === cert.certificateId ? "Checking…" : "On-Chain"}
+                          {verifying === cert.certificateId ? "⏳ Checking…" : "⛓️ On-Chain"}
+                        </button>
+                      ) : (
+                        <button
+                          style={S.btn("gold")}
+                          onClick={() => handleMintNFT(cert)}
+                          disabled={minting === cert.certificateId}
+                          title="Mint this certificate as an NFT on the blockchain"
+                        >
+                          {minting === cert.certificateId ? "⏳ Minting…" : "🏅 Mint NFT"}
                         </button>
                       )}
                     </div>

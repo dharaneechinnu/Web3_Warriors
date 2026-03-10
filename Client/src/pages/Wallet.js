@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import api from "../services/api";
+import { getBalance } from "../web3/services/skillTokenService";
+import { BLOCK_EXPLORER } from "../web3/config";
 
 // ============= STYLED COMPONENTS =============
 
@@ -531,6 +533,7 @@ const Wallet = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [showAllTx, setShowAllTx] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [onChainBalance, setOnChainBalance] = useState(null); // PTKN on-chain balance
 
   useEffect(() => {
     fetchAllData();
@@ -549,9 +552,20 @@ const Wallet = () => {
         api.get(`/wallet/nfts/${userId}`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { nfts: [] } }))
       ]);
 
-      setWallet(walletRes.data.wallet || walletRes.data);
+      const walletData = walletRes.data.wallet || walletRes.data;
+      setWallet(walletData);
       setEarnings(earningsRes.data.earnings || null);
       setNfts(nftsRes.data.nfts || []);
+
+      // Fetch on-chain PTKN balance (best-effort, silent on failure)
+      const walletAddr = walletData?.walletAddress ||
+        (userId ? localStorage.getItem(`walletAddress:${userId}`) : null) ||
+        localStorage.getItem('walletAddress');
+      if (walletAddr) {
+        getBalance(walletAddr)
+          .then(bal => setOnChainBalance(bal))
+          .catch(err => console.error('[Wallet] on-chain balance fetch failed:', err.message));
+      }
     } catch (err) {
       console.error("Error fetching wallet:", err);
       setError("Failed to load wallet data");
@@ -659,11 +673,11 @@ const Wallet = () => {
               accent="linear-gradient(to right, #d946ef, #a855f7)"
             >
               <StatIcon>⛓️</StatIcon>
-              <StatLabel>On-Chain Balance</StatLabel>
+              <StatLabel>On-Chain PTKN Balance</StatLabel>
               <StatValue gradient="linear-gradient(to right, #d946ef, #a855f7)">
-                {wallet?.onChainBalance ?? "—"}
+                {onChainBalance !== null ? Number(onChainBalance).toFixed(2) : (wallet?.onChainBalance ?? "—")}
               </StatValue>
-              <StatSubtext>Blockchain Tokens</StatSubtext>
+              <StatSubtext>Blockchain Tokens (PTKN)</StatSubtext>
             </StatCard>
 
             <StatCard
@@ -750,6 +764,81 @@ const Wallet = () => {
             </Section>
           )}
 
+          {/* ===== ON-CHAIN TRANSACTIONS (txHash present) ===== */}
+          {(() => {
+            const onChainTxs = (wallet?.transactions || []).filter(t => t.txHash);
+            const userId = localStorage.getItem("userId");
+            const walletAddr =
+              wallet?.walletAddress ||
+              (userId ? localStorage.getItem(`walletAddress:${userId}`) : null) ||
+              localStorage.getItem('walletAddress');
+            if (!onChainTxs.length && !walletAddr) return null;
+            return (
+              <Section variants={itemVariants}>
+                <SectionTitle>⛓️ On-Chain Transactions</SectionTitle>
+                {walletAddr && (
+                  <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>Wallet:</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#d946ef' }}>
+                      {walletAddr.slice(0, 8)}…{walletAddr.slice(-6)}
+                    </span>
+                    {BLOCK_EXPLORER && (
+                      <a
+                        href={`${BLOCK_EXPLORER}/address/${walletAddr}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: '0.78rem', color: '#06b6d4', textDecoration: 'none', border: '1px solid rgba(6,182,212,0.3)', padding: '0.2rem 0.6rem', borderRadius: '0.4rem' }}
+                      >
+                        View on Explorer ↗
+                      </a>
+                    )}
+                  </div>
+                )}
+                {onChainTxs.length === 0 ? (
+                  <EmptyState style={{ padding: '1.5rem', fontSize: '0.88rem' }}>
+                    No on-chain transactions yet. On-chain activity will appear here once you enroll in a course or win a challenge with a connected wallet.
+                  </EmptyState>
+                ) : (
+                  onChainTxs.map((tx, i) => (
+                    <TransactionItem
+                      key={i}
+                      txType={tx.transactionType}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                    >
+                      <TransactionInfo>
+                        <TransactionDescription>
+                          {tx.transactionType === 'challenge_win' ? '🏆 ' : tx.transactionType === 'spend' ? '📤 ' : '📥 '}
+                          {tx.description || 'On-chain transaction'}
+                        </TransactionDescription>
+                        <TransactionDate>
+                          {new Date(tx.timestamp || tx.date).toLocaleDateString('en-US', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                          })}
+                        </TransactionDate>
+                        {BLOCK_EXPLORER && (
+                          <a
+                            href={`${BLOCK_EXPLORER}/tx/${tx.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '0.7rem', color: '#7c3aed', fontFamily: 'monospace', display: 'block', marginTop: '0.2rem' }}
+                          >
+                            Tx: {tx.txHash.slice(0, 18)}… ↗
+                          </a>
+                        )}
+                      </TransactionInfo>
+                      <TransactionAmount txType={tx.transactionType}>
+                        {tx.transactionType === 'spend' ? '-' : '+'}{tx.amount} PTKN
+                      </TransactionAmount>
+                    </TransactionItem>
+                  ))
+                )}
+              </Section>
+            );
+          })()}
+
           {/* ===== TRANSACTIONS + TRANSFER ===== */}
           <ContentGrid>
             {/* Transaction History */}
@@ -790,9 +879,18 @@ const Wallet = () => {
                             month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
                           })}
                         </TransactionDate>
-                        {tx.txHash && (
-                          <TransactionTxHash>Tx: {tx.txHash.substring(0, 16)}...</TransactionTxHash>
-                        )}
+                        {tx.txHash && BLOCK_EXPLORER ? (
+                          <a
+                            href={`${BLOCK_EXPLORER}/tx/${tx.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            <TransactionTxHash>⛓️ Tx: {tx.txHash.substring(0, 18)}… ↗</TransactionTxHash>
+                          </a>
+                        ) : tx.txHash ? (
+                          <TransactionTxHash>⛓️ Tx: {tx.txHash.substring(0, 18)}…</TransactionTxHash>
+                        ) : null}
                       </TransactionInfo>
                       <TransactionAmount txType={tx.transactionType}>
                         {tx.transactionType === 'spend' ? '-' : '+'}{tx.amount}
@@ -838,7 +936,7 @@ const Wallet = () => {
                 </div>
               </Section>
 
-              {/* Transfer Form */}
+              {/* Transfer Form
               <Section variants={itemVariants}>
                 <SectionTitle>Transfer Tokens</SectionTitle>
 
@@ -906,7 +1004,7 @@ const Wallet = () => {
                     {transferLoading ? "Processing..." : "Send Tokens"}
                   </SubmitButton>
                 </TransferFormStyled>
-              </Section>
+              </Section> */}
             </div>
           </ContentGrid>
 

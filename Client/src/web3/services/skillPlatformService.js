@@ -132,3 +132,47 @@ export async function cancelSession(sessionId) {
 
   throw new Error('cancelSession is not implemented on the deployed SkillPlatform contract');
 }
+
+/**
+ * Declare contest winners and distribute the on-chain challenge pool.
+ * Must be called by the SkillPlatform contract owner wallet.
+ *
+ * @param {number|string} onChainChallengeId  uint256 ID stored in the Challenge DB doc
+ * @param {string} goldAddress    1st place winner (0x…)
+ * @param {string} silverAddress  2nd place winner (0x…)
+ * @param {string} bronzeAddress  3rd place winner (0x…)
+ * @returns tx receipt (contains WinnersDeclared event)
+ */
+export async function declareWinners(onChainChallengeId, goldAddress, silverAddress, bronzeAddress) {
+  if (!window.ethereum) throw new Error('MetaMask not installed.');
+
+  const ZERO = '0x0000000000000000000000000000000000000000';
+  const gold   = goldAddress   || ZERO;
+  const silver = silverAddress || ZERO;
+  const bronze = bronzeAddress || ZERO;
+
+  const w3 = new Web3(window.ethereum);
+  await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+  const chainId = Number(await w3.eth.getChainId());
+  if (typeof EXPECTED_CHAIN_ID !== 'undefined' && EXPECTED_CHAIN_ID !== null) {
+    if (chainId !== EXPECTED_CHAIN_ID) {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: Web3.utils.toHex(EXPECTED_CHAIN_ID) }],
+      });
+    }
+  }
+
+  const contract = new w3.eth.Contract(SkillPlatformABI, SKILL_PLATFORM_ADDRESS);
+  const accounts = await w3.eth.getAccounts();
+  const from = accounts[0];
+  if (!from) throw new Error('No MetaMask account connected.');
+
+  const tx = await contract.methods
+    .declareWinners(String(onChainChallengeId), gold, silver, bronze)
+    .send({ from });
+
+  console.log(`[SkillPlatform] declareWinners id=${onChainChallengeId}`, tx.transactionHash);
+  return tx;
+}

@@ -46,6 +46,7 @@ exports.createChallenge = async (req, res) => {
             judgingCriteria: judgingCriteria || '',
             tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : [],
             prizeDistribution: prizeDistribution || { first: 50, second: 30, third: 20 },
+            onChainChallengeId: Math.floor(Date.now() / 1000), // Unix timestamp as uint256 on-chain ID
             status: 'draft'
         });
 
@@ -363,15 +364,35 @@ exports.distributeRewards = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Rewards already distributed' });
         }
 
+        // Accept any positive integer rank (1, 2, 3, or even just 1 for a single winner)
         const rankedSubs = challenge.submissions
-            .filter(s => s.rank && [1, 2, 3].includes(s.rank))
+            .filter(s => s.rank && Number.isInteger(s.rank) && s.rank >= 1)
             .sort((a, b) => a.rank - b.rank);
 
-        const prizeMap = {
-            1: Math.round(challenge.rewardTokens * challenge.prizeDistribution.first / 100),
-            2: Math.round(challenge.rewardTokens * challenge.prizeDistribution.second / 100),
-            3: Math.round(challenge.rewardTokens * challenge.prizeDistribution.third / 100)
-        };
+        if (rankedSubs.length === 0) {
+            return res.status(400).json({ success: false, message: 'No ranked submissions found. Rank at least one submission before announcing winners.' });
+        }
+
+        // Build prize map dynamically:
+        //   - If only 1 winner (rank 1 only) → they get 100% of rewardTokens
+        //   - If 2 winners (ranks 1 & 2) → proportionally split first+second %
+        //   - If 3+ winners → use configured prizeDistribution percentages
+        let prizeMap = {};
+        const presentRanks = rankedSubs.map(s => s.rank);
+        const pd = challenge.prizeDistribution;
+
+        if (presentRanks.length === 1) {
+            prizeMap[presentRanks[0]] = challenge.rewardTokens;
+        } else if (presentRanks.includes(1) && presentRanks.includes(2) && !presentRanks.includes(3)) {
+            // 2 winners: re-weight first+second proportionally
+            const total = pd.first + pd.second;
+            prizeMap[1] = Math.round(challenge.rewardTokens * pd.first  / total);
+            prizeMap[2] = Math.round(challenge.rewardTokens * pd.second / total);
+        } else {
+            prizeMap[1] = Math.round(challenge.rewardTokens * pd.first   / 100);
+            prizeMap[2] = Math.round(challenge.rewardTokens * pd.second  / 100);
+            prizeMap[3] = Math.round(challenge.rewardTokens * pd.third   / 100);
+        }
 
         for (const sub of rankedSubs) {
             const tokens = prizeMap[sub.rank] || 0;
@@ -389,7 +410,6 @@ exports.distributeRewards = async (req, res) => {
                         timestamp: new Date()
                     });
                     await learner.save();
-                    // store wallet for on-chain response
                     sub._walletAddress = learner.UserWalletAddress || null;
                 }
             }
@@ -397,6 +417,7 @@ exports.distributeRewards = async (req, res) => {
 
         challenge.rewardsDistributed = true;
         challenge.status = 'completed';
+        challenge.winnerAnnouncedAt = new Date();
         challenge.updatedAt = new Date();
         await challenge.save();
 
@@ -417,12 +438,19 @@ exports.distributeRewards = async (req, res) => {
         // Build winners payload for frontend on-chain transfers
         const winners = rankedSubs.map(s => ({
             learnerId: s.learnerId,
+            learnerName: s.learnerName,
             rank: s.rank,
             tokens: s.rewardTokens || 0,
             walletAddress: s._walletAddress || null
         }));
 
-        res.json({ success: true, message: 'Rewards distributed successfully', distributed: rankedSubs.length, winners });
+        res.json({
+            success: true,
+            message: 'Rewards distributed successfully',
+            distributed: rankedSubs.length,
+            winners,
+            onChainChallengeId: challenge.onChainChallengeId
+        });
     } catch (error) {
         console.error('distributeRewards error:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -482,6 +510,41 @@ exports.getLeaderboard = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── RECORD ON-CHAIN TX HASH FOR WINNER ──────────────────────────────────────
+exports.winnerTxHash = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { learnerId, txHash, mentorId } = req.body;
+        if (!learnerId || !txHash) {
+            return res.status(400).json({ message: 'learnerId and txHash are required' });
+        }
+
+        const challenge = await Challenge.findById(id);
+        if (!challenge) return res.status(404).json({ message: 'Challenge not found' });
+        if (challenge.mentorId.toString() !== mentorId) {
+            return res.status(403).json({ message: 'Unauthorized' });
+        }
+
+        // Attach txHash to the most recent challenge_win transaction for this challenge
+        const learner = await User.findById(learnerId);
+        if (learner) {
+            for (let i = learner.transactionHistory.length - 1; i >= 0; i--) {
+                const tx = learner.transactionHistory[i];
+                if (tx.transactionType === 'challenge_win' && tx.description?.includes(challenge.title)) {
+                    tx.txHash = txHash;
+                    break;
+                }
+            }
+            await learner.save();
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('winnerTxHash error:', err);
+        res.status(500).json({ message: err.message });
     }
 };
 
