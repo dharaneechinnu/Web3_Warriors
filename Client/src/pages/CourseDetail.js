@@ -4,9 +4,8 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import TransactionStatus from '../components/TransactionStatus';
-import { approve, transfer } from '../web3/services/skillTokenService';
-import { purchaseCourse } from '../web3/services/skillPlatformService';
-import { SKILL_PLATFORM_ADDRESS, BLOCK_EXPLORER } from '../web3/config';
+import { useTokenPayment } from '../hooks/useTokenPayment';
+import { BLOCK_EXPLORER } from '../web3/config';
 
 const CourseDetail = () => {
   const { courseId } = useParams();
@@ -17,15 +16,21 @@ const CourseDetail = () => {
   const [course, setCourse] = useState(location.state?.course || null);
   const [loading, setLoading] = useState(!course);
   const [error, setError] = useState(null);
-  const [enrolling, setEnrolling] = useState(false);
-  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isEnrolled,    setIsEnrolled]    = useState(false);
   const [isMentorCourse, setIsMentorCourse] = useState(false);
+  const [txVisible,     setTxVisible]     = useState(false);
 
-  // Web3 transaction state
-  const [txVisible, setTxVisible] = useState(false);
-  const [txStatus, setTxStatus] = useState('wallet');
-  const [txMessage, setTxMessage] = useState('');
-  const [txHash, setTxHash] = useState('');
+  // All PTKN payment logic lives in this hook
+  const {
+    enroll,
+    status:  txStatus,
+    txHash,
+    message: txMessage,
+    reset:   resetTx,
+  } = useTokenPayment();
+
+  // Derived: button disabled while in-flight
+  const enrolling = txStatus === 'pending';
 
   useEffect(() => {
     if (!course) {
@@ -82,75 +87,16 @@ const CourseDetail = () => {
       return;
     }
 
-    setEnrolling(true);
+    const mentorAddr =
+      course.mentorWallet ||
+      course.mentor?.walletAddress ||
+      course.instructorWallet ||
+      null;
+
     setTxVisible(true);
-    setTxStatus('pending');
-    setTxMessage('Enrolling in course…');
-    setTxHash('');
 
-    let web2Done = false;
-    let web3TxHash = '';
-
-    try {
-      // ── Step 1: Web2 Enrollment (always runs first — preserved regardless of web3) ──
-      await api.post('/courses/enroll', {
-        learnerId: user._id,
-        courseId: course._id
-      });
-      web2Done = true;
-      setIsEnrolled(true);
-      setTxMessage('Enrolled! Attempting on-chain PTKN transfer to instructor…');
-
-      // ── Step 2: Web3 PTKN Transfer learner → mentor (best-effort, no rollback on failure) ──
-      try {
-        const mentorAddr =
-          course.mentorWallet ||
-          course.mentor?.walletAddress ||
-          course.instructorWallet ||
-          null;
-        const learnerAddr =
-          user.walletAddress ||
-          (user._id ? localStorage.getItem(`walletAddress:${user._id}`) : null) ||
-          localStorage.getItem('walletAddress') ||
-          null;
-
-        if (mentorAddr && learnerAddr) {
-          setTxStatus('wallet');
-          setTxMessage('MetaMask: Approve transfer of 1 PTKN to instructor…');
-          const tx = await transfer(mentorAddr, '1');
-          web3TxHash = tx.transactionHash || '';
-          setTxHash(web3TxHash);
-
-          // Record on-chain txHash in backend (fire-and-forget — non-blocking)
-          api.post('/courses/enroll/txhash', {
-            learnerId: user._id,
-            courseId: course._id,
-            txHash: web3TxHash
-          }).catch(() => {});
-        }
-      } catch (web3Err) {
-        // Web3 failed — enrollment already saved, no rollback needed
-        console.warn('[CourseDetail] On-chain PTKN transfer skipped:', web3Err.message);
-      }
-
-      setTxStatus('success');
-      setTxMessage(
-        web3TxHash
-          ? 'Enrolled! 1 PTKN transferred to instructor on-chain. ✅'
-          : 'Enrolled successfully! (Connect wallet to also send on-chain PTKN to instructor)'
-      );
-    } catch (err) {
-      if (web2Done) {
-        // Enrollment was saved but something failed after — keep enrolled
-        setTxStatus('success');
-        setTxMessage('Enrolled successfully!');
-      } else {
-        setTxStatus('error');
-        setTxMessage(err.message || err.response?.data?.message || 'Enrollment failed.');
-      }
-    } finally {
-      setEnrolling(false);
-    }
+    const result = await enroll(course._id, user._id, mentorAddr);
+    if (result.success) setIsEnrolled(true);
   };
 
   if (loading) {
@@ -190,7 +136,7 @@ const CourseDetail = () => {
         message={txMessage}
         txHash={txHash}
         explorer={BLOCK_EXPLORER}
-        onClose={() => setTxVisible(false)}
+        onClose={() => { setTxVisible(false); resetTx(); }}
       />
       {/* Animated Background */}
       <div className="fixed inset-0 bg-grid-white/5 opacity-30 pointer-events-none"></div>

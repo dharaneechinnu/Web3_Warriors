@@ -55,6 +55,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MentorApplicationsList from './pages/admin/MentorApplicationsList';
 import MentorApplicationDetail from './pages/admin/MentorApplicationDetail';
+import AdminNFTMint from './pages/admin/AdminNFTMint';
 
 // Loading component
 const LoadingScreen = () => (
@@ -361,6 +362,9 @@ function AppRoutes() {
 
           {/* /admin/mentors/:id — application detail */}
           <Route path="mentors/:id" element={<MentorApplicationDetail />} />
+
+          {/* /admin/nft-mint — NFT certificate minting */}
+          <Route path="nft-mint" element={<AdminNFTMint />} />
         </Route>
 
         {/* Catch all route - redirect based on auth state */}

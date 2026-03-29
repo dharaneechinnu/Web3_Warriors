@@ -576,6 +576,26 @@ export default function BookSession() {
                         {"\u274C"} This request was declined.{s.cancelReason && ` Reason: "${s.cancelReason}"`}
                       </div>
                     )}
+                    {/* On-chain payment receipt */}
+                    {s.txHash && (
+                      <div style={{
+                        marginTop: "0.6rem", padding: "0.5rem 0.7rem",
+                        background: "rgba(6,182,212,0.07)", borderRadius: "0.5rem",
+                        border: "1px solid rgba(6,182,212,0.2)", fontSize: "0.75rem",
+                      }}>
+                        <span style={{ color: "#67e8f9", fontWeight: 600 }}>⛓️ Payment tx: </span>
+                        <a
+                          href={`${BLOCK_EXPLORER}/tx/${s.txHash}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ color: "#06b6d4", fontFamily: "monospace", wordBreak: "break-all" }}
+                        >
+                          {s.txHash.slice(0, 10)}…{s.txHash.slice(-8)}
+                        </a>
+                        {s.sessionFee && (
+                          <span style={{ marginLeft: "0.5rem", color: "#94a3b8" }}>({s.sessionFee} ETH)</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end" }}>
                     {s.status === "confirmed" && s.roomId && (

@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import api from "../../services/api";
 import { assetUrl } from "../../config";
-import { declareWinners } from "../../web3/services/skillPlatformService";
-import { transfer as transferSKT } from "../../web3/services/skillTokenService";
+import { useChallengeReward } from "../../hooks/useChallengeReward";
 
 const BLOCK_EXPLORER = process.env.REACT_APP_BLOCK_EXPLORER || 'https://sepolia.etherscan.io';
 
@@ -25,11 +24,20 @@ const MentorChallenges = () => {
     prizeThird: 20,
   });
   const [saving, setSaving] = useState(false);
-  const [distributing, setDistributing] = useState(false);
-  const [announcedWinners, setAnnouncedWinners] = useState(null); // winners after announce step
-  const [minting, setMinting] = useState(false);
-  const [mintResults, setMintResults] = useState([]); // [{rank, walletAddress, txHash?, error?}]
+  const [distributing,    setDistributing]    = useState(false);
+  const [announcedWinners, setAnnouncedWinners] = useState(null);
+  const [showNotOwnerMsg, setShowNotOwnerMsg] = useState(false);
   const [mentorId] = useState(localStorage.getItem("userId"));
+
+  // On-chain reward distribution hook (admin / contract owner only)
+  const {
+    distribute,
+    minting,
+    mintResults,
+    isOwnerConnected,
+    checking: ownerChecking,
+    reset: resetMintResults,
+  } = useChallengeReward();
 
   const fetchChallenges = useCallback(async () => {
     setLoading(true);
@@ -100,7 +108,8 @@ const MentorChallenges = () => {
     setSelected(challenge);
     setView("submissions");
     setAnnouncedWinners(null);
-    setMintResults([]);
+    setShowNotOwnerMsg(false);
+    resetMintResults();
     try {
       const token = localStorage.getItem("token");
       const res = await api.get(`/challenges/${challenge._id}/submissions?mentorId=${mentorId}`, {
@@ -164,87 +173,41 @@ const MentorChallenges = () => {
     }
   };
 
-  // ── Step 2: On-chain SKT minting via SkillPlatform.declareWinners ────────────
+  // ── Step 2: On-chain SKT distribution via PlatformToken.reward() ────────────
+  // Only the contract owner (admin) can execute this.
   const handleMintTokens = async () => {
     const winners = announcedWinners || [];
-    const withWallet = winners.filter(w => w.walletAddress && w.tokens > 0);
+    if (winners.length === 0) return;
 
-    if (winners.length === 0) {
-      setError("No winners to mint tokens for.");
+    setShowNotOwnerMsg(false);
+    setError(null);
+
+    // Check owner before showing confirm dialog — avoids misleading UX
+    if (!isOwnerConnected && !ownerChecking) {
+      setShowNotOwnerMsg(true);
       return;
     }
-    if (withWallet.length === 0) {
-      setError("None of the winners have a connected wallet address. Ask them to connect MetaMask in their Wallet page first.");
-      return;
-    }
+
+    const withWallet = winners.filter(w => w.walletAddress && w.tokens > 0);
+    const totalTokens = withWallet.reduce((s, w) => s + w.tokens, 0);
 
     if (!window.confirm(
-      `You are about to transfer ${withWallet.reduce((s, w) => s + w.tokens, 0)} SKT from your connected wallet to ${withWallet.length} winner(s).\n\nMake sure your MetaMask wallet has enough SKT tokens."`
+      `Send ${totalTokens} SKT to ${withWallet.length} winner(s) on-chain?\n\nMake sure MetaMask is connected to Sepolia as the admin wallet.`
     )) return;
 
-    setMinting(true);
-    setMintResults([]);
-    setError(null);
-    const token = localStorage.getItem("token");
-    const results = [];
+    const result = await distribute(selected._id, winners);
 
-    const byRank = [...withWallet].sort((a, b) => a.rank - b.rank);
-    const ZERO = "0x0000000000000000000000000000000000000000";
-    const goldAddr   = byRank.find(w => w.rank === 1)?.walletAddress || ZERO;
-    const silverAddr = byRank.find(w => w.rank === 2)?.walletAddress || ZERO;
-    const bronzeAddr = byRank.find(w => w.rank === 3)?.walletAddress || ZERO;
+    if (result?.notOwner) {
+      setShowNotOwnerMsg(true);
+      return;
+    }
 
-    const onChainId = selected.onChainChallengeId || parseInt(selected._id.slice(-8), 16);
-
-    // If only 1 winner, skip declareWinners (which expects pool participants) and
-    // go straight to mintToWinner so the single winner gets all the tokens.
-    const isSingleWinner = byRank.length === 1;
-
-    if (!isSingleWinner) {
-      // Primary: SkillPlatform.declareWinners (batch — distributes challenge pool)
-      try {
-        const batchTx = await declareWinners(onChainId, goldAddr, silverAddr, bronzeAddr);
-        for (const w of byRank) {
-          results.push({ rank: w.rank, learnerName: w.learnerName, walletAddress: w.walletAddress, tokens: w.tokens, txHash: batchTx.transactionHash });
-          api.patch(
-            `/challenges/${selected._id}/winner-txhash`,
-            { learnerId: w.learnerId, txHash: batchTx.transactionHash, mentorId },
-            { headers: { Authorization: `Bearer ${token}` } }
-          ).catch(() => {});
-        }
-        setMintResults(results);
-        setSuccess(`⛓️ On-chain distribution complete! ${results.length} winner(s) credited via SkillPlatform.`);
-        setMinting(false);
-        return;
-      } catch (batchErr) {
-        console.warn("[MentorChallenges] declareWinners failed, falling back to mintTo:", batchErr.message);
+    if (result?.results) {
+      const ok = result.results.filter(r => r.txHash).length;
+      if (ok > 0) {
+        setSuccess(`⛓️ ${ok}/${result.results.length} SKT token(s) sent on-chain to winner(s).`);
       }
     }
-
-    // Fallback (or single winner): direct ERC20 transfer from mentor's wallet
-    for (const w of byRank) {
-      try {
-        const tx = await transferSKT(w.walletAddress, String(w.tokens));
-        const txHash = tx.transactionHash;
-        results.push({ rank: w.rank, learnerName: w.learnerName, walletAddress: w.walletAddress, tokens: w.tokens, txHash });
-        api.patch(
-          `/challenges/${selected._id}/winner-txhash`,
-          { learnerId: w.learnerId, txHash, mentorId },
-          { headers: { Authorization: `Bearer ${token}` } }
-        ).catch(() => {});
-      } catch (txErr) {
-        results.push({ rank: w.rank, learnerName: w.learnerName, walletAddress: w.walletAddress, tokens: w.tokens, error: txErr.message });
-      }
-    }
-
-    setMintResults(results);
-    const ok = results.filter(r => r.txHash).length;
-    if (ok > 0) {
-      setSuccess(`⛓️ ${ok}/${byRank.length} SKT token transfer(s) completed on-chain.`);
-    } else {
-      setError(`⚠️ Token transfer failed. Make sure your MetaMask wallet has enough SKT tokens and is connected to the correct network.`);
-    }
-    setMinting(false);
   };
 
   const statusBadge = (s) => {
@@ -433,15 +396,24 @@ const MentorChallenges = () => {
                 </button>
               )}
 
-              {/* Step 2 – Transfer SKT tokens to winners from mentor's wallet */}
+              {/* Step 2 – On-chain SKT transfer (admin / contract owner only) */}
               {announcedWinners && mintResults.length === 0 && (
-                <button
-                  onClick={handleMintTokens}
-                  disabled={minting}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
-                >
-                  {minting ? '⏳ Sending tokens…' : '⛓️ Send SKT to Winners'}
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={handleMintTokens}
+                    disabled={minting || ownerChecking}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+                  >
+                    {ownerChecking ? '⏳ Checking wallet…'
+                      : minting    ? '⏳ Sending tokens…'
+                      : '⛓️ Send SKT to Winners'}
+                  </button>
+                  {showNotOwnerMsg && (
+                    <p className="text-xs text-blue-300 bg-blue-900/20 border border-blue-700/30 px-3 py-2 rounded-lg max-w-xs text-right">
+                      ℹ️ Admin wallet required. Connect MetaMask as the contract owner to send on-chain tokens.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

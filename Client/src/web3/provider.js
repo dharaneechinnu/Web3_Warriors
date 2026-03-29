@@ -3,6 +3,12 @@ import { EXPECTED_CHAIN_ID, NETWORK_NAME } from "./config";
 
 let _web3 = null;
 
+// Reset cached instance when MetaMask account changes so getAccount()
+// always returns the current wallet (not a stale one from a previous session).
+if (typeof window !== 'undefined' && window.ethereum) {
+  window.ethereum.on('accountsChanged', () => { _web3 = null; });
+}
+
 /**
  * Get a Web3 instance connected to MetaMask.
  * Prompts the user to connect if not already connected.

@@ -20,7 +20,8 @@ async function getWeb3AndContract() {
 async function getReadOnlyWeb3() {
   // For read-only calls, use whatever provider is available
   if (window.ethereum) {
-    return { w3: new Web3(window.ethereum), contract: new Web3(window.ethereum).eth.Contract(PlatformTokenABI, SKILL_TOKEN_ADDRESS) };
+    const w3 = new Web3(window.ethereum);
+    return { w3, contract: new w3.eth.Contract(PlatformTokenABI, SKILL_TOKEN_ADDRESS) };
   }
   throw new Error("No Web3 provider found.");
 }
@@ -174,9 +175,9 @@ export async function approve(spender, amount) {
 }
 
 /**
- * Mint SKT tokens directly to a contest winner's wallet.
- * Requires the connected MetaMask wallet to hold MINTER_ROLE on SkillToken.
- * (If only SkillPlatform holds MINTER_ROLE, use SkillPlatform.declareWinners instead.)
+ * Reward a contest winner with platform SKT tokens.
+ * Calls SkillToken.reward(address user, uint256 amount) — the platform's built-in
+ * minting function that credits tokens directly to the winner's wallet.
  *
  * @param {string} recipientAddr  Winner's wallet address
  * @param {string|number} amount  Amount in SKT (human-readable, e.g. "100")
@@ -203,7 +204,7 @@ export async function mintToWinner(recipientAddr, amount) {
   if (!from) throw new Error('No MetaMask account connected.');
 
   const weiAmount = w3.utils.toWei(String(amount), 'ether');
-  const tx = await contract.methods.mintTo(recipientAddr, weiAmount).send({ from });
-  console.log(`[SkillToken] mintTo ${amount} SKT → ${recipientAddr}`, tx.transactionHash);
+  const tx = await contract.methods.reward(recipientAddr, weiAmount).send({ from });
+  console.log(`[SkillToken] reward ${amount} SKT → ${recipientAddr}`, tx.transactionHash);
   return { tx, txHash: tx.transactionHash };
 }

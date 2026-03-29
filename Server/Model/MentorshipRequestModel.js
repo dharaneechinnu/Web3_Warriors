@@ -43,10 +43,16 @@ const MentorshipRequestSchema = new mongoose.Schema({
         type: Date, 
         default: null 
     },
-    updatedAt: { 
-        type: Date, 
-        default: Date.now 
-    }
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    },
+    // On-chain session booking payment (SkillPlatform.bookSession — 1 ETH)
+    txHash:        { type: String, default: null },
+    sessionFee:    { type: String, default: null },  // e.g. "1" (ETH)
+    learnerWallet: { type: String, default: null },
+    mentorWallet:  { type: String, default: null },
+    onChainBookingId: { type: String, default: null }
 });
 
 MentorshipRequestSchema.index({ mentorId: 1, status: 1 });

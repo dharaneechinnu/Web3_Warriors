@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { API_BASE_URL } from '../../config';
+import { useTokenPayment } from '../../hooks/useTokenPayment';
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import AuthBackground from "../../components/ui/AuthBackground";
@@ -21,13 +22,23 @@ function RegisterLearner(){
   const [error,setError] = useState(null);
   const [loading,setLoading] = useState(false);
 
+  const { sendRegistrationReward } = useTokenPayment();
+
   const handleSubmit = async (e)=>{
     e.preventDefault();
     try{
       setError(null);setLoading(true);
       const payload = { ...formData };
-      await axios.post(`${API_BASE_URL}/Auth/register`, payload);
-      // after successful register, navigate to learner login
+      const res = await axios.post(`${API_BASE_URL}/Auth/register`, payload);
+
+      // Attempt 10 PTKN registration reward — fire and forget.
+      // Only succeeds if admin MetaMask wallet is connected; silently skips otherwise.
+      const newUserWallet =
+        res.data?.user?.UserWalletAddress ||
+        res.data?.user?.walletAddress ||
+        null;
+      sendRegistrationReward(newUserWallet); // intentionally no await
+
       navigate('/login/learner', { state: { message: 'Registration successful. Please login.' } });
     }catch(err){
       console.error(err);

@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  Award,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -233,8 +234,9 @@ const ContentArea = styled.div`
 
 // ── NAV CONFIG ─────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { to: '/admin/dashboard',         label: 'Dashboard',    icon: LayoutDashboard },
-  { to: '/admin/mentors',           label: 'Applications', icon: Users           },
+  { to: '/admin/dashboard',  label: 'Dashboard',    icon: LayoutDashboard },
+  { to: '/admin/mentors',    label: 'Applications', icon: Users           },
+  { to: '/admin/nft-mint',   label: 'NFT Mint',     icon: Award           },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────

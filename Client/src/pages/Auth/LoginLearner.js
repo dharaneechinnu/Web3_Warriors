@@ -147,10 +147,14 @@ function LoginLearner() {
               fontSize: '0.85rem', color: '#a78bfa'
             }}
           >
-            🦊 Wallet connected: <strong style={{ color: '#c4b5fd' }}>
+            🦊 Wallet: <strong style={{ color: '#c4b5fd' }}>
               {walletInfo.address.slice(0, 6)}…{walletInfo.address.slice(-4)}
             </strong>
-            {/* PTKN balance hidden for learners/mentors by request */}
+            {walletInfo.ptkn !== undefined && (
+              <span style={{ marginLeft: '0.75rem', color: '#c4b5fd' }}>
+                · <strong>{parseFloat(walletInfo.ptkn).toFixed(2)} PTKN</strong>
+              </span>
+            )}
           </motion.div>
         )}
 

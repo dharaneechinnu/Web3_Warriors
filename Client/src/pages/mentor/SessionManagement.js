@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { getMyApplication } from "../../services/mentorApplicationService";
 import TransactionStatus from "../../components/TransactionStatus";
-import { confirmSession as web3ConfirmSession, cancelSession as web3CancelSession } from "../../web3/services/skillPlatformService";
 import { BLOCK_EXPLORER } from "../../web3/config";
 
 /* -- helpers -- */
@@ -320,26 +319,8 @@ const SessionManagement = () => {
 
   /* -- mark complete -- */
   const markComplete = async (id) => {
-    // Step 1: Confirm session on blockchain (releases ETH to mentor)
-    const session = all.find(s => s._id === id);
-    if (session?.blockchainSessionId != null) {
-      setTxVisible(true);
-      setTxStatus('wallet');
-      setTxMessage('Confirm session completion in MetaMask to release ETH escrow…');
-      setTxHash('');
-      try {
-        const tx = await web3ConfirmSession(session.blockchainSessionId);
-        setTxStatus('pending');
-        setTxMessage('Blockchain confirmed! Updating on server…');
-        setTxHash(tx.transactionHash || '');
-      } catch (err) {
-        setTxStatus('error');
-        setTxMessage(err.message || 'Blockchain confirmation failed.');
-        return; // Don't mark complete on server if blockchain fails
-      }
-    }
-
-    // Step 2: API mark complete
+    // Payment was transferred instantly at booking time (no escrow), so just mark complete on server.
+    // Step 1: API mark complete
     try {
       await api.patch(`/sessions/complete/${id}`, { mentorId }, { headers: { Authorization: `Bearer ${tok()}` } });
       if (txVisible) {

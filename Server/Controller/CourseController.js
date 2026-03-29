@@ -3052,7 +3052,7 @@ exports.generateCertificate = async (req, res) => {
         const mentorName = mentor ? (mentor.name || mentor.email) : (course.mentorName || 'Instructor');
         const learnerName = user.name || user.email || 'Learner';
 
-        // Create certificate
+        // Create certificate record in DB
         const certificate = await CertificationModel.create({
             userId,
             courseId,

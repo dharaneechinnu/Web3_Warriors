@@ -515,12 +515,11 @@ export default function MyCertificates() {
                         </button>
                       ) : (
                         <button
-                          style={S.btn("gold")}
-                          onClick={() => handleMintNFT(cert)}
-                          disabled={minting === cert.certificateId}
-                          title="Mint this certificate as an NFT on the blockchain"
+                          style={{ ...S.btn("gold"), cursor: "default", opacity: 0.7 }}
+                          title="NFT certificate is minted by the platform admin after course completion"
+                          disabled
                         >
-                          {minting === cert.certificateId ? "⏳ Minting…" : "🏅 Mint NFT"}
+                          🏅 NFT Pending
                         </button>
                       )}
                     </div>
