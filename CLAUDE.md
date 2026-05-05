@@ -337,6 +337,6 @@ When working on course features, check which system the UI is actually calling.
 
 ## Production Deployment
 
-- Domain: `ardk.online` / `www.ardk.online` (configured in CORS whitelist)
+- Domain: `ardk.online` / `www.ardk.online` (configred in CORS whitelist)
 - Sepolia testnet for all blockchain operations (`EXPECTED_CHAIN_ID = 11155111`)
 - MetaMask required for Web3 features; falls back gracefully if no wallet connected
